@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,1277 +7,991 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-:root {
-  --azul:#2B2FA8; --azul-dark:#1e2275; --azul-light:#4a4fc4;
-  --bg:#f0f2ff; --card:#ffffff; --text:#1a1a2e; --muted:#6b7280;
-  --border:#e2e8f0; --shadow:0 4px 24px rgba(43,47,168,0.10);
-  --verde:#16a34a; --laranja:#ea580c; --vermelho:#dc2626; --amarelo:#ca8a04;
+/* ── TEMA ─────────────────────────────────────────────── */
+:root,[data-theme="light"]{
+  --bg:#f0f2ff; --card:#ffffff; --card2:#f8faff; --text:#1a1a2e;
+  --muted:#6b7280; --border:#e2e8f0; --shadow:0 4px 24px rgba(43,47,168,.10);
+  --shadow-sm:0 2px 8px rgba(43,47,168,.08);
+  --azul:#2B2FA8; --azul-dark:#1e2275; --azul-light:#4a4fc4; --azul-bg:#eef0ff;
+  --verde:#16a34a; --verde-bg:#dcfce7; --laranja:#ea580c; --laranja-bg:#ffedd5;
+  --amarelo:#ca8a04; --amarelo-bg:#fef9c3; --vermelho:#dc2626; --vermelho-bg:#fee2e2;
+  --roxo:#7c3aed; --roxo-bg:#f5f3ff;
+  --header-bg:linear-gradient(135deg,#1e2275,#2B2FA8);
 }
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);min-height:100vh;}
+[data-theme="dark"]{
+  --bg:#0f1117; --card:#1a1d2e; --card2:#12151f; --text:#e2e8f0;
+  --muted:#9ca3af; --border:#2d3148; --shadow:0 4px 24px rgba(0,0,0,.4);
+  --shadow-sm:0 2px 8px rgba(0,0,0,.3);
+  --azul:#6366f1; --azul-dark:#4f46e5; --azul-light:#818cf8; --azul-bg:#1e1b4b;
+  --verde:#22c55e; --verde-bg:#14532d; --laranja:#f97316; --laranja-bg:#431407;
+  --amarelo:#eab308; --amarelo-bg:#422006; --vermelho:#f87171; --vermelho-bg:#450a0a;
+  --roxo:#a78bfa; --roxo-bg:#2e1065;
+  --header-bg:linear-gradient(135deg,#0f1117,#1a1d2e);
+}
+*{box-sizing:border-box;margin:0;padding:0;transition:background-color .2s,border-color .2s,color .1s;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;}
+
+/* ── HEADER ───────────────────────────────────────────── */
 header{
-  background:linear-gradient(135deg,var(--azul-dark),var(--azul));
-  padding:10px 20px;display:flex;align-items:center;gap:12px;
-  box-shadow:0 2px 12px rgba(0,0,0,.18);position:sticky;top:0;z-index:1000;
+  background:var(--header-bg);
+  padding:0 20px;height:52px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 2px 16px rgba(0,0,0,.25);position:relative;z-index:200;
 }
-header img{height:32px;}
-header .titulo{color:#fff;font-size:1rem;font-weight:600;flex:1;}
-header .setor-tag{background:rgba(255,255,255,.18);color:#fff;padding:4px 12px;border-radius:20px;font-size:.82rem;}
-.btn-voltar{background:none;border:1.5px solid rgba(255,255,255,.4);color:#fff;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82rem;}
-.btn-voltar:hover{background:rgba(255,255,255,.1);}
+header img{height:30px;flex-shrink:0;}
+header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.setor-pill{background:rgba(255,255,255,.18);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:600;white-space:nowrap;}
+.hbtn{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);color:#fff;padding:5px 11px;border-radius:7px;cursor:pointer;font-size:.78rem;font-weight:600;display:flex;align-items:center;gap:5px;transition:background .15s;}
+.hbtn:hover{background:rgba(255,255,255,.22);}
 
-/* Layout principal */
-.layout{display:flex;height:calc(100vh - 56px);}
-.sidebar{width:320px;min-width:320px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.content{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+/* ── LAYOUT ───────────────────────────────────────────── */
+.app{display:flex;height:calc(100vh - 52px);}
 
-/* Sidebar top */
-.sidebar-top{padding:14px 16px;border-bottom:1px solid var(--border);}
-.mes-nav{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
-.mes-nav button{background:none;border:1.5px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:1rem;}
-.mes-nav span{flex:1;text-align:center;font-weight:700;color:var(--azul);font-size:1rem;}
+/* ── SIDEBAR ──────────────────────────────────────────── */
+.sidebar{
+  width:280px;min-width:280px;background:var(--card);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sb-section{padding:14px 16px;border-bottom:1px solid var(--border);}
 
-/* Mini calendário */
-.mini-cal{width:100%;}
-.mini-cal .dias-semana{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;}
-.mini-cal .dias-semana span{text-align:center;font-size:.7rem;color:var(--muted);font-weight:600;}
-.mini-cal .dias{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
-.mini-cal .dia{
+/* Mini cal */
+.mes-nav{display:flex;align-items:center;gap:6px;margin-bottom:10px;}
+.mes-nav button{background:var(--azul-bg);border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--azul);font-size:1rem;display:flex;align-items:center;justify-content:center;}
+.mes-nav button:hover{background:var(--azul);color:#fff;}
+.mes-nav span{flex:1;text-align:center;font-weight:700;color:var(--azul);font-size:.88rem;}
+
+.mini-cal .row7{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;}
+.mini-cal .dh{text-align:center;font-size:.62rem;font-weight:700;color:var(--muted);padding:3px 0;}
+.dia-cell{
   aspect-ratio:1;display:flex;align-items:center;justify-content:center;
-  border-radius:50%;font-size:.78rem;cursor:pointer;position:relative;
-  transition:background .15s;
+  border-radius:50%;font-size:.72rem;cursor:pointer;position:relative;transition:background .12s;
 }
-.mini-cal .dia:hover{background:var(--bg);}
-.mini-cal .dia.outro-mes{color:var(--muted);opacity:.4;}
-.mini-cal .dia.hoje{background:var(--azul);color:#fff;font-weight:700;}
-.mini-cal .dia.selecionado{background:var(--azul-light);color:#fff;}
-.mini-cal .dia.tem-rota::after{
-  content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
-  width:4px;height:4px;border-radius:50%;background:var(--verde);
-}
-.mini-cal .dia.nao-util{opacity:.35;cursor:default;}
-.mini-cal .dia.passado{opacity:.6;}
+.dia-cell:hover:not(.nao-util){background:var(--azul-bg);}
+.dia-cell.outro-mes{color:var(--muted);opacity:.35;}
+.dia-cell.hoje{background:var(--azul);color:#fff;font-weight:700;}
+.dia-cell.sel{background:var(--azul-light);color:#fff;}
+.dia-cell.tem-rota::after{content:'';position:absolute;bottom:1px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--verde);}
+.dia-cell.nao-util{opacity:.3;cursor:default;}
+.dia-cell.passado{opacity:.7;}
 
-/* Sidebar stats */
-.sidebar-stats{padding:12px 16px;border-bottom:1px solid var(--border);}
-.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.stat{background:var(--bg);border-radius:8px;padding:10px 12px;text-align:center;}
-.stat .val{font-size:1.3rem;font-weight:700;color:var(--azul);}
-.stat .lbl{font-size:.68rem;color:var(--muted);margin-top:2px;}
-.stat.ok .val{color:var(--verde);}
-.stat.warn .val{color:var(--amarelo);}
+/* Stats mensais */
+.stats-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat-box{background:var(--card2);border-radius:8px;padding:9px 10px;text-align:center;border:1px solid var(--border);}
+.stat-box .sv{font-size:1.2rem;font-weight:800;color:var(--azul);}
+.stat-box .sl{font-size:.62rem;color:var(--muted);margin-top:1px;line-height:1.2;}
+.stat-box.ok .sv{color:var(--verde);}
+.stat-box.warn .sv{color:var(--amarelo);}
 
-/* Botões de ação */
-.sidebar-actions{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
-.btn-acao{
-  padding:9px 14px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;
-  display:flex;align-items:center;gap:8px;transition:background .15s;
-}
+/* Ações sidebar */
+.sb-actions{padding:12px 16px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border);}
+.btn-main{padding:10px 14px;border-radius:9px;border:none;cursor:pointer;font-size:.85rem;font-weight:700;display:flex;align-items:center;gap:8px;transition:.15s;}
 .btn-roteirizar{background:var(--azul);color:#fff;}
 .btn-roteirizar:hover{background:var(--azul-dark);}
-.btn-agendar{background:var(--bg);color:var(--azul);border:1.5px solid var(--azul);}
+.btn-agendar{background:var(--azul-bg);color:var(--azul);border:1.5px solid var(--azul);}
 .btn-agendar:hover{background:var(--azul);color:#fff;}
 
-/* Views tabs */
-.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--card);}
-.tab{flex:1;padding:10px;text-align:center;cursor:pointer;font-size:.88rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;transition:.15s;}
+/* Resumo dia sidebar */
+.sb-dia{padding:12px 16px;overflow-y:auto;flex:1;}
+.sb-dia-label{font-size:.7rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:8px;}
+.resumo-cidade{display:flex;align-items:center;gap:6px;font-size:.8rem;padding:5px 0;border-bottom:1px solid var(--border);}
+.resumo-cidade:last-child{border-bottom:none;}
+.cidade-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+/* ── MAIN CONTENT ─────────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+/* Tabs */
+.tabs{display:flex;background:var(--card);border-bottom:2px solid var(--border);padding:0 16px;gap:4px;}
+.tab{padding:10px 18px;cursor:pointer;font-size:.85rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:.15s;white-space:nowrap;}
+.tab:hover{color:var(--azul);}
 .tab.ativo{color:var(--azul);border-bottom-color:var(--azul);}
 
-/* View DIA */
-#viewDia{flex:1;display:flex;overflow:hidden;}
-.timeline{width:300px;min-width:300px;overflow-y:auto;padding:16px;border-right:1px solid var(--border);}
-.timeline-header{font-weight:700;color:var(--azul);margin-bottom:12px;font-size:.95rem;}
-.slot{
-  display:flex;gap:10px;margin-bottom:8px;padding:10px 12px;
-  border-radius:10px;background:var(--bg);border-left:4px solid var(--border);
-  transition:transform .1s;cursor:pointer;
-}
-.slot:hover{transform:translateX(3px);}
-.slot.classe-A{border-left-color:#dc2626;}
-.slot.classe-B{border-left-color:#ea580c;}
-.slot.classe-C{border-left-color:#ca8a04;}
-.slot.prospecto{border-left-color:#16a34a;}
-.slot.agendado{border-left-color:var(--azul);}
-.slot.merchandising{border-left-color:#8b5cf6;background:#f5f3ff;}
-.slot.almoco{border-left-color:#94a3b8;background:#f8fafc;}
-.slot.realizado{opacity:.65;}
-.slot-hora{font-size:.75rem;color:var(--muted);min-width:44px;}
-.slot-info .nome{font-weight:600;font-size:.85rem;color:var(--text);}
-.slot-info .detalhe{font-size:.75rem;color:var(--muted);margin-top:2px;}
-.slot-info .tags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
-.tag{font-size:.65rem;padding:2px 7px;border-radius:10px;font-weight:600;}
-.tag-A{background:#fee2e2;color:#991b1b;}
-.tag-B{background:#ffedd5;color:#9a3412;}
-.tag-C{background:#fef9c3;color:#713f12;}
-.tag-ag{background:#dbeafe;color:#1e40af;}
-.tag-real{background:#dcfce7;color:#166534;}
-#mapa{flex:1;}
+/* Content area */
+.content-area{flex:1;overflow:auto;padding:16px;}
 
-/* View SEMANA */
-#viewSemana{flex:1;overflow:auto;padding:16px;}
-.semana-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;min-width:700px;}
-.dia-col{background:var(--card);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;}
-.dia-col-header{
-  padding:10px 12px;background:var(--azul);color:#fff;text-align:center;
-  font-size:.82rem;font-weight:600;
+/* ── VIEW DIA ─────────────────────────────────────────── */
+/* Cards resumo do dia */
+.dia-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.dcard{
+  background:var(--card);border-radius:12px;padding:14px 16px;
+  border:1px solid var(--border);box-shadow:var(--shadow-sm);
+  display:flex;flex-direction:column;gap:4px;
 }
-.dia-col-header.hoje-h{background:var(--verde);}
-.dia-col-header.passado-h{background:var(--muted);}
-.dia-col-body{padding:8px;}
-.slot-mini{
-  padding:6px 8px;border-radius:6px;margin-bottom:6px;font-size:.75rem;
-  border-left:3px solid var(--border);background:var(--bg);cursor:pointer;
-}
-.slot-mini .h{color:var(--muted);font-size:.68rem;}
-.slot-mini .n{font-weight:600;color:var(--text);}
+.dcard .dc-icon{font-size:1.3rem;}
+.dcard .dc-val{font-size:1.4rem;font-weight:800;color:var(--azul);}
+.dcard .dc-lbl{font-size:.7rem;color:var(--muted);font-weight:600;}
+.dcard .dc-sub{font-size:.72rem;color:var(--muted);margin-top:2px;line-height:1.4;}
 
-/* View MÊS */
-#viewMes{flex:1;overflow:auto;padding:16px;}
-.mes-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;min-width:600px;}
-.mes-header-col{text-align:center;font-size:.75rem;font-weight:700;color:var(--muted);padding:4px;}
-.mes-dia{
-  background:var(--card);border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.06);
-  min-height:90px;padding:6px;cursor:pointer;
-}
-.mes-dia:hover{box-shadow:var(--shadow);}
-.mes-dia .num{font-size:.75rem;font-weight:700;color:var(--muted);}
-.mes-dia.hoje-m .num{background:var(--azul);color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;}
-.mes-dia.outro-m{opacity:.4;}
-.mes-dia.nao-util-m{background:var(--bg);}
-.visita-chip{font-size:.65rem;padding:2px 5px;border-radius:4px;margin-top:2px;background:var(--azul);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.visita-chip.agend{background:var(--verde);}
+/* Timeline */
+.tl-header{font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.tl-grid{display:flex;flex-direction:column;gap:8px;}
 
-/* Modal */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;display:flex;align-items:center;justify-content:center;}
-.modal{background:var(--card);border-radius:16px;padding:28px;width:90%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,.2);}
-.modal h3{color:var(--azul);margin-bottom:16px;font-size:1.1rem;}
-.mfield{margin-bottom:14px;}
-.mfield label{display:block;font-size:.82rem;font-weight:600;color:var(--text);margin-bottom:5px;}
-.mfield input,.mfield select,.mfield textarea{
-  width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;
-  font-size:.9rem;outline:none;font-family:inherit;
+.slot-card{
+  background:var(--card);border-radius:12px;border:1px solid var(--border);
+  box-shadow:var(--shadow-sm);display:flex;align-items:stretch;overflow:hidden;
+  transition:transform .12s,box-shadow .12s;cursor:pointer;
 }
-.mfield input:focus,.mfield select:focus,.mfield textarea:focus{border-color:var(--azul);}
-.mfield textarea{resize:vertical;min-height:60px;}
-.modal-btns{display:flex;gap:10px;margin-top:16px;}
-.mbtn{flex:1;padding:10px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:.9rem;}
+.slot-card:hover{transform:translateY(-1px);box-shadow:var(--shadow);}
+.slot-side{width:5px;flex-shrink:0;}
+.slot-body{flex:1;padding:11px 14px;display:flex;gap:12px;align-items:center;}
+.slot-hora-col{text-align:center;min-width:50px;}
+.slot-hora-col .hora{font-size:.82rem;font-weight:700;color:var(--azul);}
+.slot-hora-col .dur{font-size:.65rem;color:var(--muted);margin-top:2px;}
+.slot-divider{width:1px;background:var(--border);align-self:stretch;}
+.slot-info{flex:1;}
+.slot-nome{font-weight:700;font-size:.88rem;color:var(--text);}
+.slot-sub{font-size:.75rem;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.slot-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;}
+.tag{font-size:.62rem;padding:2px 8px;border-radius:10px;font-weight:700;}
+.tag-A{background:var(--vermelho-bg);color:var(--vermelho);}
+.tag-B{background:var(--laranja-bg);color:var(--laranja);}
+.tag-C{background:var(--amarelo-bg);color:var(--amarelo);}
+.tag-ag{background:var(--azul-bg);color:var(--azul);}
+.tag-real{background:var(--verde-bg);color:var(--verde);}
+.tag-pros{background:var(--verde-bg);color:var(--verde);}
+.tag-merch{background:var(--roxo-bg);color:var(--roxo);}
+
+.slot-card.tipo-almoco .slot-body{opacity:.6;}
+.slot-card.tipo-merchandising .slot-side{background:var(--roxo);}
+.slot-card.tipo-almoco .slot-side{background:#94a3b8;}
+.slot-card.tipo-prospeccao .slot-side{background:var(--verde);}
+.slot-card.tipo-agendamento .slot-side{background:var(--azul);}
+
+.slot-card.classe-A .slot-side{background:var(--vermelho);}
+.slot-card.classe-B .slot-side{background:var(--laranja);}
+.slot-card.classe-C .slot-side{background:var(--amarelo);}
+.slot-card.classe- .slot-side{background:#94a3b8;}
+
+.slot-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:80px;}
+.btn-reg{padding:4px 10px;border-radius:6px;border:none;cursor:pointer;font-size:.7rem;font-weight:700;transition:.12s;}
+.btn-reg.nao{background:var(--azul-bg);color:var(--azul);}
+.btn-reg.sim{background:var(--verde-bg);color:var(--verde);}
+
+.empty-day{text-align:center;padding:48px 20px;color:var(--muted);}
+.empty-day .ei{font-size:2.5rem;margin-bottom:12px;}
+.empty-day p{font-size:.88rem;line-height:1.6;}
+
+/* ── VIEW SEMANA ──────────────────────────────────────── */
+.semana-wrap{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;min-width:700px;}
+.sem-col{background:var(--card);border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;}
+.sem-col-head{
+  padding:10px 12px;font-size:.78rem;font-weight:700;text-align:center;
+  background:var(--azul);color:#fff;
+}
+.sem-col-head.hoje-h{background:var(--verde);}
+.sem-col-head.passado-h{background:var(--muted);}
+.sem-col-body{padding:8px;display:flex;flex-direction:column;gap:6px;}
+.sem-slot{
+  border-radius:8px;padding:7px 9px;font-size:.76rem;cursor:pointer;
+  border-left:3px solid var(--border);background:var(--card2);transition:.12s;
+}
+.sem-slot:hover{transform:translateX(2px);}
+.sem-slot .sh{font-size:.65rem;color:var(--muted);}
+.sem-slot .sn{font-weight:700;color:var(--text);margin-top:2px;}
+.sem-slot .sc{font-size:.65rem;color:var(--muted);}
+
+/* ── VIEW MÊS ─────────────────────────────────────────── */
+.mes-wrap{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;min-width:600px;}
+.mes-hd{text-align:center;font-size:.7rem;font-weight:700;color:var(--muted);padding:4px;}
+.mes-cel{
+  background:var(--card);border-radius:8px;border:1px solid var(--border);
+  min-height:85px;padding:6px;cursor:pointer;transition:.12s;
+}
+.mes-cel:hover:not(.nao-util-m){box-shadow:var(--shadow);}
+.mes-cel.outro-m{opacity:.3;pointer-events:none;}
+.mes-cel.nao-util-m{background:var(--card2);}
+.mes-cel.hoje-m .mn{background:var(--azul);color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;}
+.mn{font-size:.72rem;font-weight:700;color:var(--muted);}
+.mchip{font-size:.62rem;padding:2px 5px;border-radius:4px;margin-top:3px;background:var(--azul);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mchip.ag{background:var(--verde);}
+
+/* ── VIEW RESUMO ──────────────────────────────────────── */
+.resumo-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+.res-card{background:var(--card);border-radius:14px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;}
+.res-card h4{font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:14px;}
+.res-big{font-size:2.2rem;font-weight:800;color:var(--azul);}
+.res-sub{font-size:.75rem;color:var(--muted);margin-top:4px;}
+.res-list{display:flex;flex-direction:column;gap:7px;margin-top:8px;}
+.res-item{display:flex;justify-content:space-between;align-items:center;font-size:.8rem;padding:6px 8px;background:var(--card2);border-radius:7px;}
+.res-item .ri-label{color:var(--muted);}
+.res-item .ri-val{font-weight:700;color:var(--text);}
+.progress-bar{height:7px;background:var(--border);border-radius:10px;overflow:hidden;margin-top:8px;}
+.progress-fill{height:100%;border-radius:10px;background:var(--azul);transition:width .4s;}
+.progress-fill.ok{background:var(--verde);}
+.progress-fill.warn{background:var(--amarelo);}
+.dia-resumo-row{
+  background:var(--card);border-radius:12px;border:1px solid var(--border);
+  box-shadow:var(--shadow-sm);margin-bottom:8px;padding:12px 16px;
+  display:flex;align-items:center;gap:16px;cursor:pointer;transition:.12s;
+}
+.dia-resumo-row:hover{transform:translateX(3px);}
+.dr-data{min-width:100px;font-weight:700;font-size:.82rem;color:var(--azul);}
+.dr-chips{display:flex;gap:6px;flex:1;flex-wrap:wrap;}
+.dr-chip{padding:3px 9px;border-radius:10px;font-size:.68rem;font-weight:700;background:var(--azul-bg);color:var(--azul);}
+.dr-chip.verde{background:var(--verde-bg);color:var(--verde);}
+.dr-chip.laranja{background:var(--laranja-bg);color:var(--laranja);}
+
+/* ── MAPA FLUTUANTE ───────────────────────────────────── */
+.fab-mapa{
+  position:fixed;bottom:20px;right:20px;width:52px;height:52px;
+  background:var(--azul);color:#fff;border:none;border-radius:50%;
+  font-size:1.3rem;cursor:pointer;box-shadow:0 4px 16px rgba(43,47,168,.4);
+  z-index:500;display:flex;align-items:center;justify-content:center;
+  transition:background .15s,transform .15s;
+}
+.fab-mapa:hover{background:var(--azul-dark);transform:scale(1.08);}
+.fab-mapa-label{
+  position:fixed;bottom:24px;right:80px;background:var(--card);color:var(--text);
+  padding:5px 12px;border-radius:8px;font-size:.78rem;font-weight:600;
+  box-shadow:var(--shadow);border:1px solid var(--border);z-index:500;
+  pointer-events:none;opacity:0;transition:opacity .2s;
+}
+.fab-mapa:hover + .fab-mapa-label{opacity:1;}
+
+/* Modal mapa */
+.mapa-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.mapa-overlay.show{opacity:1;pointer-events:all;}
+.mapa-modal{
+  background:var(--card);border-radius:16px;overflow:hidden;
+  width:90vw;max-width:900px;height:80vh;display:flex;flex-direction:column;
+  box-shadow:0 16px 60px rgba(0,0,0,.4);
+}
+.mapa-modal-head{
+  padding:12px 18px;background:var(--azul);color:#fff;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.mapa-modal-head h3{font-size:.95rem;font-weight:700;}
+.mapa-close{background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:.95rem;}
+#mapaModal{flex:1;}
+
+/* ── MODAIS ───────────────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;}
+.modal{background:var(--card);border-radius:16px;padding:26px;width:90%;max-width:460px;box-shadow:0 12px 50px rgba(0,0,0,.25);}
+.modal h3{color:var(--azul);margin-bottom:16px;font-size:1rem;}
+.mf{margin-bottom:13px;}
+.mf label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:5px;}
+.mf input,.mf select,.mf textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.88rem;outline:none;background:var(--card2);color:var(--text);}
+.mf input:focus,.mf select:focus,.mf textarea:focus{border-color:var(--azul);}
+.mf textarea{resize:vertical;min-height:60px;}
+.modal-btns{display:flex;gap:8px;margin-top:14px;}
+.mbtn{flex:1;padding:10px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:.88rem;}
 .mbtn-ok{background:var(--azul);color:#fff;}
-.mbtn-ok:hover{background:var(--azul-dark);}
-.mbtn-cancel{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}
+.mbtn-cancel{background:var(--card2);color:var(--muted);border:1.5px solid var(--border);}
+.autocomplete-list{max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:7px;margin-top:4px;display:none;background:var(--card);}
+.autocomplete-item{padding:8px 12px;cursor:pointer;font-size:.83rem;border-bottom:1px solid var(--border);}
+.autocomplete-item:hover{background:var(--azul-bg);}
 
-/* Senha roteirizar */
+/* Senha */
 .senha-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:none;align-items:center;justify-content:center;}
 .senha-overlay.show{display:flex;}
-.senha-box{background:#fff;border-radius:14px;padding:28px;width:340px;text-align:center;}
-.senha-box h3{color:var(--azul);margin-bottom:8px;}
-.senha-box p{font-size:.85rem;color:var(--muted);margin-bottom:16px;}
-.senha-box input{
-  width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;
-  font-size:1rem;text-align:center;outline:none;margin-bottom:10px;
-}
+.senha-box{background:var(--card);border-radius:14px;padding:28px;width:320px;text-align:center;box-shadow:0 12px 50px rgba(0,0,0,.3);}
+.senha-box h3{color:var(--azul);margin-bottom:6px;}
+.senha-box p{font-size:.82rem;color:var(--muted);margin-bottom:14px;}
+.senha-box input{width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:1rem;text-align:center;outline:none;background:var(--card2);color:var(--text);margin-bottom:8px;}
 .senha-box input:focus{border-color:var(--azul);}
-.senha-box .merr{color:#dc2626;font-size:.82rem;margin-bottom:8px;display:none;}
-.senha-box .sbtn{
-  width:100%;padding:11px;background:var(--azul);color:#fff;border:none;
-  border-radius:8px;font-weight:700;cursor:pointer;font-size:.95rem;
-}
+.senha-err{color:var(--vermelho);font-size:.78rem;margin-bottom:8px;display:none;}
+.senha-box .sbtn{width:100%;padding:11px;background:var(--azul);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.9rem;}
+.senha-box .sbtn:hover{background:var(--azul-dark);}
+.senha-cancel{margin-top:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;}
 
-/* Loading spinner */
-.spinner{
-  width:40px;height:40px;border:4px solid var(--border);
-  border-top-color:var(--azul);border-radius:50%;
-  animation:spin .8s linear infinite;margin:40px auto;
-}
+/* Spinner */
+.spinner{width:36px;height:36px;border:4px solid var(--border);border-top-color:var(--azul);border-radius:50%;animation:spin .7s linear infinite;margin:32px auto;}
 @keyframes spin{to{transform:rotate(360deg);}}
-.msg-centro{text-align:center;padding:40px;color:var(--muted);}
-
-/* Realizado badge */
-.realizado-btn{
-  margin-left:auto;padding:3px 8px;border-radius:6px;font-size:.68rem;font-weight:700;
-  border:none;cursor:pointer;
-}
-.realizado-btn.nao{background:#fef9c3;color:#713f12;}
-.realizado-btn.sim{background:#dcfce7;color:#166534;}
-
-/* Responsivo */
-@media(max-width:768px){
-  .sidebar{width:100%;min-width:0;height:auto;}
-  .layout{flex-direction:column;}
-  #viewDia{flex-direction:column;}
-  .timeline{width:100%;min-width:0;border-right:none;border-bottom:1px solid var(--border);}
-  #mapa{height:300px;}
-}
+.hidden{display:none!important;}
 </style>
 </head>
 <body>
+
+<!-- HEADER -->
 <header>
   <img src="assets/ferretti-branco.png" alt="Ferretti">
   <span class="titulo">Roteirização de Vendas</span>
-  <span class="setor-tag" id="headerSetor">—</span>
-  <button class="btn-voltar" onclick="location.href='index.html'">← Sair</button>
+  <span class="setor-pill" id="headerSetor">—</span>
+  <button class="hbtn" onclick="toggleTema()" id="btnTema">🌙 Escuro</button>
+  <button class="hbtn" onclick="location.href='index.html'">← Sair</button>
 </header>
 
-<div class="layout">
+<div class="app">
   <!-- SIDEBAR -->
   <aside class="sidebar">
-    <div class="sidebar-top">
+    <div class="sb-section">
       <div class="mes-nav">
         <button onclick="mudarMes(-1)">‹</button>
         <span id="labelMes">—</span>
         <button onclick="mudarMes(1)">›</button>
       </div>
       <div class="mini-cal">
-        <div class="dias-semana">
-          <span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span>
+        <div class="row7" style="margin-bottom:4px">
+          <div class="dh">D</div><div class="dh">S</div><div class="dh">T</div>
+          <div class="dh">Q</div><div class="dh">Q</div><div class="dh">S</div><div class="dh">S</div>
         </div>
-        <div class="dias" id="miniCal"></div>
+        <div class="row7" id="miniCal"></div>
       </div>
     </div>
 
-    <div class="sidebar-stats">
-      <div style="font-size:.8rem;font-weight:700;color:var(--muted);margin-bottom:8px;">PROGRESSO DO MÊS</div>
-      <div class="stats-grid" id="statsGrid">
-        <div class="stat"><div class="val" id="stVisitas">—</div><div class="lbl">Visitas / 100</div></div>
-        <div class="stat"><div class="val" id="stHoras">—</div><div class="lbl">H. Chão / 100h</div></div>
-        <div class="stat"><div class="val" id="stProsp">—</div><div class="lbl">Prospecções / 2</div></div>
-        <div class="stat"><div class="val" id="stKm">—</div><div class="lbl">Km estimado</div></div>
+    <div class="sb-section">
+      <div style="font-size:.7rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:8px;">METAS DO MÊS</div>
+      <div class="stats-row">
+        <div class="stat-box" id="stVisBox"><div class="sv" id="stVis">—</div><div class="sl">Visitas<br>meta 100</div></div>
+        <div class="stat-box" id="stHBox"><div class="sv" id="stH">—</div><div class="sl">H. Chão<br>meta 100h</div></div>
+        <div class="stat-box" id="stPBox"><div class="sv" id="stP">—</div><div class="sl">Prospecções<br>meta 2</div></div>
+        <div class="stat-box"><div class="sv" id="stKm">—</div><div class="sl">Km<br>estimado</div></div>
       </div>
     </div>
 
-    <div class="sidebar-actions">
-      <button class="btn-acao btn-roteirizar" onclick="pedirSenhaRoteirizar()">
-        ⚙️ Fazer Roteirização
-      </button>
-      <button class="btn-acao btn-agendar" onclick="abrirModalAgendamento()">
-        📅 Novo Agendamento
-      </button>
+    <div class="sb-actions">
+      <button class="btn-main btn-roteirizar" onclick="pedirSenha()">⚙️ Fazer Roteirização</button>
+      <button class="btn-main btn-agendar" onclick="abrirAgendamento()">📅 Novo Agendamento</button>
     </div>
 
-    <div style="padding:10px 16px;overflow-y:auto;flex:1;">
-      <div style="font-size:.8rem;font-weight:700;color:var(--muted);margin-bottom:8px;">DIA SELECIONADO</div>
-      <div id="resumoDia" class="msg-centro" style="padding:20px;font-size:.85rem;">
-        Clique em um dia no calendário.
-      </div>
+    <div class="sb-dia">
+      <div class="sb-dia-label">DIA SELECIONADO</div>
+      <div id="sbDiaResumo" style="font-size:.82rem;color:var(--muted);">Clique em um dia.</div>
     </div>
   </aside>
 
-  <!-- CONTENT -->
-  <main class="content">
+  <!-- MAIN -->
+  <main class="main">
     <div class="tabs">
-      <div class="tab ativo" onclick="setView('dia')" id="tabDia">📍 Dia + Mapa</div>
-      <div class="tab" onclick="setView('semana')" id="tabSemana">📅 Semana</div>
-      <div class="tab" onclick="setView('mes')" id="tabMes">🗓️ Mês</div>
+      <div class="tab ativo" id="tabDia"    onclick="setView('dia')">📍 Dia</div>
+      <div class="tab"        id="tabSemana" onclick="setView('semana')">📅 Semana</div>
+      <div class="tab"        id="tabMes"   onclick="setView('mes')">🗓️ Mês</div>
+      <div class="tab"        id="tabResumo" onclick="setView('resumo')">📊 Resumo</div>
     </div>
 
     <!-- VIEW DIA -->
-    <div id="viewDia" style="flex:1;display:flex;overflow:hidden;">
-      <div class="timeline" id="timeline">
-        <div class="msg-centro">Selecione um dia no calendário para ver o roteiro.</div>
+    <div class="content-area" id="viewDia">
+      <div class="dia-cards" id="diaCards">
+        <div class="dcard"><div class="dc-icon">👥</div><div class="dc-val" id="dcClientes">—</div><div class="dc-lbl">Clientes hoje</div></div>
+        <div class="dcard"><div class="dc-icon">🚗</div><div class="dc-val" id="dcKm">—</div><div class="dc-lbl">Km estimado</div></div>
+        <div class="dcard" style="grid-column:span 2"><div class="dc-icon">📍</div><div class="dc-val" style="font-size:1rem" id="dcCidades">—</div><div class="dc-lbl">Cidades do roteiro</div><div class="dc-sub" id="dcPros"></div></div>
       </div>
-      <div id="mapa"></div>
+      <div class="tl-header">
+        <span id="tlData">ROTEIRO DO DIA</span>
+        <span style="font-size:.72rem;color:var(--muted);" id="tlDataCompleta"></span>
+      </div>
+      <div class="tl-grid" id="timeline"></div>
     </div>
 
     <!-- VIEW SEMANA -->
-    <div id="viewSemana" style="display:none;flex:1;overflow:auto;padding:16px;">
-      <div class="semana-grid" id="semanaGrid"></div>
+    <div class="content-area hidden" id="viewSemana">
+      <div class="semana-wrap" id="semanaGrid"></div>
     </div>
 
     <!-- VIEW MÊS -->
-    <div id="viewMes" style="display:none;flex:1;overflow:auto;padding:16px;">
-      <div class="mes-grid" id="mesGrid"></div>
+    <div class="content-area hidden" id="viewMes">
+      <div class="mes-wrap" id="mesGrid"></div>
+    </div>
+
+    <!-- VIEW RESUMO -->
+    <div class="content-area hidden" id="viewResumo">
+      <div class="resumo-wrap" id="resumoCards"></div>
+      <div style="font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:10px;">ROTEIRO DIA A DIA</div>
+      <div id="resumoDiaDia"></div>
     </div>
   </main>
 </div>
 
-<!-- Modal Agendamento -->
-<div class="overlay" id="overlayAgendamento" style="display:none;" onclick="if(event.target===this)fecharModal()">
+<!-- FAB mapa -->
+<button class="fab-mapa" onclick="abrirMapa()" title="Ver mapa do roteiro">🗺️</button>
+<div class="fab-mapa-label">Ver no mapa</div>
+
+<!-- Modal mapa -->
+<div class="mapa-overlay" id="mapaOverlay" onclick="if(event.target===this)fecharMapa()">
+  <div class="mapa-modal">
+    <div class="mapa-modal-head">
+      <h3 id="mapaTitle">Roteiro do dia — mapa</h3>
+      <button class="mapa-close" onclick="fecharMapa()">✕</button>
+    </div>
+    <div id="mapaModal"></div>
+  </div>
+</div>
+
+<!-- Modal agendamento -->
+<div class="overlay hidden" id="ovAgendamento" onclick="if(event.target===this)fecharAg()">
   <div class="modal">
     <h3>📅 Novo Agendamento</h3>
-    <div class="mfield">
+    <div class="mf">
       <label>Cliente</label>
-      <input type="text" id="agCliente" placeholder="Digite o nome ou código do cliente" oninput="filtrarClientes(this.value)">
-      <div id="listaClientes" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;display:none;"></div>
+      <input type="text" id="agCliente" placeholder="Nome ou código do cliente" oninput="filtrarClientesAg(this.value)">
+      <div class="autocomplete-list" id="agLista"></div>
     </div>
-    <div class="mfield">
-      <label>Data</label>
-      <input type="date" id="agData">
-    </div>
-    <div class="mfield">
-      <label>Horário</label>
-      <input type="time" id="agHora" value="10:00">
-    </div>
-    <div class="mfield">
-      <label>Duração (minutos)</label>
-      <input type="number" id="agDuracao" value="60" min="15" max="180" step="15">
-    </div>
-    <div class="mfield">
-      <label>Observação</label>
-      <textarea id="agObs" placeholder="Ex: Reunião com gerente, apresentar novidades..."></textarea>
-    </div>
+    <div class="mf"><label>Data</label><input type="date" id="agData"></div>
+    <div class="mf"><label>Horário</label><input type="time" id="agHora" value="10:00"></div>
+    <div class="mf"><label>Duração (min)</label><input type="number" id="agDuracao" value="60" min="15" max="240" step="15"></div>
+    <div class="mf"><label>Observação</label><textarea id="agObs" placeholder="Motivo, contato, etc."></textarea></div>
     <div class="modal-btns">
-      <button class="mbtn mbtn-cancel" onclick="fecharModal()">Cancelar</button>
-      <button class="mbtn mbtn-ok" onclick="salvarAgendamento()">Salvar Agendamento</button>
+      <button class="mbtn mbtn-cancel" onclick="fecharAg()">Cancelar</button>
+      <button class="mbtn mbtn-ok" onclick="salvarAg()">Salvar</button>
     </div>
   </div>
 </div>
 
-<!-- Modal Resultado Visita -->
-<div class="overlay" id="overlayVisita" style="display:none;" onclick="if(event.target===this)fecharModalVisita()">
+<!-- Modal resultado -->
+<div class="overlay hidden" id="ovResultado" onclick="if(event.target===this)fecharRes()">
   <div class="modal">
-    <h3>✅ Registrar Resultado</h3>
-    <div id="visitaClienteNome" style="font-weight:700;color:var(--azul);margin-bottom:16px;"></div>
-    <div class="mfield">
-      <label>Resultado</label>
-      <select id="visitaResultado">
+    <h3>✅ Registrar Visita</h3>
+    <div id="resNome" style="font-weight:700;color:var(--azul);margin-bottom:14px;font-size:.95rem;"></div>
+    <div class="mf"><label>Resultado</label>
+      <select id="resResultado">
         <option value="pedido">✅ Pedido realizado</option>
         <option value="visita">👁️ Visita sem pedido</option>
         <option value="ausente">❌ Cliente ausente</option>
-        <option value="reagendar">🔄 Precisa reagendar</option>
+        <option value="reagendar">🔄 Reagendar</option>
       </select>
     </div>
-    <div class="mfield">
-      <label>Valor do pedido (R$)</label>
-      <input type="number" id="visitaValor" min="0" step="0.01" placeholder="0,00">
-    </div>
-    <div class="mfield">
-      <label>Observações</label>
-      <textarea id="visitaObs" placeholder="Anotações sobre a visita..."></textarea>
-    </div>
+    <div class="mf"><label>Valor do pedido (R$)</label><input type="number" id="resValor" min="0" step="0.01" placeholder="0,00"></div>
+    <div class="mf"><label>Observações</label><textarea id="resObs" placeholder="Anotações..."></textarea></div>
     <div class="modal-btns">
-      <button class="mbtn mbtn-cancel" onclick="fecharModalVisita()">Cancelar</button>
-      <button class="mbtn mbtn-ok" onclick="salvarResultado()">Salvar</button>
+      <button class="mbtn mbtn-cancel" onclick="fecharRes()">Cancelar</button>
+      <button class="mbtn mbtn-ok" onclick="salvarRes()">Salvar</button>
     </div>
   </div>
 </div>
 
-<!-- Senha para Roteirizar -->
-<div class="senha-overlay" id="senhaOverlay">
+<!-- Senha roteirizar -->
+<div class="senha-overlay" id="senhaOv">
   <div class="senha-box">
-    <h3>🔐 Confirmar Roteirização</h3>
-    <p>Digite a senha para gerar/refazer o roteiro do mês.</p>
-    <input type="password" id="senhaRoteirizar" placeholder="Senha" autocomplete="off">
-    <div class="merr" id="senhaErr">Senha incorreta.</div>
-    <button class="sbtn" onclick="confirmarRoteirizacao()">Gerar Roteiro</button>
-    <button onclick="document.getElementById('senhaOverlay').classList.remove('show')"
-      style="margin-top:10px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;">
-      Cancelar
-    </button>
+    <h3>⚙️ Roteirização</h3>
+    <p>Digite a senha para gerar ou refazer o roteiro do mês.</p>
+    <input type="password" id="senhaInput" placeholder="Senha" autocomplete="off">
+    <div class="senha-err" id="senhaErr">Senha incorreta.</div>
+    <button class="sbtn" onclick="confirmarRoteiro()">Gerar Roteiro</button>
+    <button class="senha-cancel" onclick="document.getElementById('senhaOv').classList.remove('show')">Cancelar</button>
   </div>
 </div>
 
 <script src="dados/clientes.js"></script>
 <script>
-// =============================================
-// CONSTANTES E CONFIG
-// =============================================
-const CONFIG = {
-  horaInicio: 8*60,        // 08:00 em minutos
-  horaFim: 17*60 + 48,     // 17:48 em minutos
-  almoco: { ini: 11*60+30, fim: 13*60+30 }, // janela de almoço
-  almocoMin: 60,           // duração do almoço
-  minVisitas: 100,
-  minHorasChao: 100,
-  metaProspeccoes: 2,
-  velocidadeKmH: 35,       // velocidade média urbana
-  tempoParking: 10,        // minutos fixos por visita (parking + check-in)
-  tempoPros: 45,           // duração da prospecção (min)
-  tempoMerchan: 15,        // tempo de merchandising por dia (min)
-  // Mapa de tempo por classificação (minutos de chão de loja)
-  tempoClasse: { 'A': 90, 'B': 60, 'C': 45, '': 30 },
+// ── CONFIG ─────────────────────────────────────────────────
+const CFG = {
+  horaIni: 8*60, horaFim: 17*60+48,
+  almoco: {ini:11*60+30,fim:13*60+30}, almocoMin:60,
+  velKmH: 35, parking: 10, merch: 15, pros: 45,
+  metaVis:100, metaH:100, metaProsp:2,
+  tempoClasse: {A:90,B:60,C:45,'':30},
 };
+const FERIADOS = new Set(['2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01','2026-06-04','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25']);
+const CORES_CLASSE = {A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#94a3b8',agendamento:'var(--azul)',merchandising:'var(--roxo)',prospeccao:'var(--verde)',almoco:'#94a3b8'};
 
-// Feriados nacionais 2026 (YYYY-MM-DD)
-const FERIADOS = new Set([
-  '2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21',
-  '2026-05-01','2026-06-04','2026-09-07','2026-10-12','2026-11-02',
-  '2026-11-15','2026-11-20','2026-12-25'
-]);
+// ── ESTADO ─────────────────────────────────────────────────
+let COD='', SETOR='', CLIENTES=[];
+let mesSel = new Date(); mesSel.setDate(1);
+let diaSel = new Date();
+let roteiro={}, agendamentos=[], visitas={}, memoria={};
+let viewAtual='dia', mapaModal=null, mapaAberto=false, hashSenha='';
+let clienteAgendamento=null, slotResultado=null;
 
-// SHA256 da senha de roteirização: "ferretti"
-const HASH_ROTEIRIZACAO_ESPERADO = ''; // calculado abaixo
-let hashRoteirizacaoCalculado = '';
-
-// Estado global
-let codVendedor = '';
-let nomeSetor = '';
-let clientes = [];
-let mesSelecionado = new Date();
-mesSelecionado.setDate(1);
-let diaSelecionado = new Date();
-let roteiro = {}; // { 'YYYY-MM-DD': [slot, ...] }
-let agendamentos = []; // [{data, hora, clienteId, duracao, obs}]
-let visitas = {}; // { 'YYYY-MM-DD_clienteId': {resultado, valor, obs} }
-let memoria = {}; // preferências de longo prazo
-let map = null;
-let clienteSelecionadoAgendamento = null;
-let slotParaResultado = null;
-let viewAtual = 'dia';
-
-// =============================================
-// INIT
-// =============================================
-async function init() {
-  const params = new URLSearchParams(location.search);
-  codVendedor = params.get('cod') || '';
-  nomeSetor = params.get('setor') || '';
-
-  document.getElementById('headerSetor').textContent = nomeSetor || codVendedor;
-  document.title = 'Roteiro — ' + nomeSetor;
-
-  // Carrega dados do vendedor
-  if (window.CLIENTES_DATA && window.CLIENTES_DATA.length > 0) {
-    clientes = window.CLIENTES_DATA.filter(c => c.cod_vendedor === codVendedor);
-  }
-
-  // Carrega estado do localStorage
-  carregarEstado();
-
-  // Inicializa mapa Leaflet
-  map = L.map('mapa', { zoomControl: true });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    maxZoom: 18
-  }).addTo(map);
-
-  // Centraliza no centróide dos clientes
-  if (clientes.length > 0) {
-    const lats = clientes.map(c => parseFloat(c.latitude)).filter(v => !isNaN(v));
-    const lons = clientes.map(c => parseFloat(c.longitude)).filter(v => !isNaN(v));
-    if (lats.length > 0) {
-      const cLat = lats.reduce((a,b) => a+b, 0) / lats.length;
-      const cLon = lons.reduce((a,b) => a+b, 0) / lons.length;
-      map.setView([cLat, cLon], 11);
-    }
-  } else {
-    map.setView([-23.5, -46.6], 10); // SP default
-  }
-
-  // Hash da senha
-  hashRoteirizacaoCalculado = await sha256('ferretti');
-
-  renderMiniCal();
-  renderStats();
-  selecionarDia(new Date());
+// ── INIT ───────────────────────────────────────────────────
+async function init(){
+  const p = new URLSearchParams(location.search);
+  COD=p.get('cod')||''; SETOR=p.get('setor')||'';
+  document.getElementById('headerSetor').textContent = SETOR||COD;
+  document.title = 'Roteiro — '+SETOR;
+  if(window.CLIENTES_DATA) CLIENTES=window.CLIENTES_DATA.filter(c=>c.cod_vendedor===COD);
+  hashSenha = await sha256('ferretti');
+  const tema = localStorage.getItem('ferretti_tema')||'light';
+  document.documentElement.setAttribute('data-theme',tema);
+  document.getElementById('btnTema').textContent = tema==='dark'?'☀️ Claro':'🌙 Escuro';
+  carregarEstado(); renderTudo(); selecionarDia(new Date());
 }
 
-// =============================================
-// PERSISTÊNCIA
-// =============================================
-function chave(tipo) {
-  const ym = mesSelecionado.toISOString().slice(0,7).replace('-','');
-  return `ferretti_roteiro_${tipo}_${codVendedor}_${ym}`;
-}
-function chaveGlobal(tipo) { return `ferretti_roteiro_${tipo}_${codVendedor}`; }
-
-function salvarEstado() {
-  const ym = mesSelecionado.toISOString().slice(0,7).replace('-','');
-  localStorage.setItem(chave('roteiro'), JSON.stringify(roteiro));
-  localStorage.setItem(chave('agendamentos'), JSON.stringify(agendamentos));
-  localStorage.setItem(chave('visitas'), JSON.stringify(visitas));
-  localStorage.setItem(chaveGlobal('memoria'), JSON.stringify(memoria));
+// ── TEMA ───────────────────────────────────────────────────
+function toggleTema(){
+  const t = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',t);
+  localStorage.setItem('ferretti_tema',t);
+  document.getElementById('btnTema').textContent = t==='dark'?'☀️ Claro':'🌙 Escuro';
 }
 
-function carregarEstado() {
-  const r = localStorage.getItem(chave('roteiro'));
-  const ag = localStorage.getItem(chave('agendamentos'));
-  const v = localStorage.getItem(chave('visitas'));
-  const m = localStorage.getItem(chaveGlobal('memoria'));
-  roteiro = r ? JSON.parse(r) : {};
-  agendamentos = ag ? JSON.parse(ag) : [];
-  visitas = v ? JSON.parse(v) : {};
-  memoria = m ? JSON.parse(m) : {};
-}
+// ── UTILS ──────────────────────────────────────────────────
+async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s.toLowerCase()));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+function isUtil(d){const x=d instanceof Date?d:new Date(d+'T12:00:00');if(x.getDay()===0||x.getDay()===6)return false;return!FERIADOS.has(ds(x));}
+function ds(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toISOString().slice(0,10);}
+function m2h(m){return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;}
+function h2m(s){const[h,m]=s.split(':').map(Number);return h*60+(m||0);}
+function haversine(la1,lo1,la2,lo2){const R=6371,d1=(la2-la1)*Math.PI/180,d2=(lo2-lo1)*Math.PI/180;const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+function tMin(a,b){if(!a||!b)return 0;return Math.round((haversine(parseFloat(a.latitude||a.lat||0),parseFloat(a.longitude||a.lon||0),parseFloat(b.latitude||b.lat||0),parseFloat(b.longitude||b.lon||0))/CFG.velKmH)*60)+CFG.parking;}
+function tKm(a,b){if(!a||!b)return 0;return haversine(parseFloat(a.latitude||a.lat||0),parseFloat(a.longitude||a.lon||0),parseFloat(b.latitude||b.lat||0),parseFloat(b.longitude||b.lon||0));}
+function cTempo(c){let t=CFG.tempoClasse[c.classificacao||'']||30;if((c.mix_produtos||0)>15)t+=15;return Math.min(t,120);}
+function diasUteis(ano,mes){const d=new Date(ano,mes,1),r=[];while(d.getMonth()===mes){if(isUtil(d))r.push(ds(new Date(d)));d.setDate(d.getDate()+1);}return r;}
+function score(c){let s=({A:40,B:25,C:15,'':8}[c.classificacao]||8);const fat=c.fat_12m||0;if(fat>50000)s+=20;else if(fat>20000)s+=12;else if(fat>5000)s+=6;if(c.ult_visita){const d=Math.round((new Date()-new Date(c.ult_visita))/86400000);s+=Math.min(d*.5,25);}else s+=30;if((c.mix_produtos||0)>10)s+=5;const m=memoria[c.cod_cliente+'_'+c.loja];if(m?.prioridade==='alta')s+=15;if(m?.prioridade==='baixa')s-=10;return s;}
+function centroide(lista){const l=lista.map(c=>parseFloat(c.latitude)).filter(v=>!isNaN(v)),o=lista.map(c=>parseFloat(c.longitude)).filter(v=>!isNaN(v));return{latitude:l.reduce((a,b)=>a+b,0)/l.length,longitude:o.reduce((a,b)=>a+b,0)/o.length};}
+function nomeDataLongo(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});}
 
-// =============================================
-// UTILITÁRIOS
-// =============================================
-async function sha256(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str.toLowerCase()));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
+// ── PERSISTÊNCIA ───────────────────────────────────────────
+function chv(t){const ym=mesSel.toISOString().slice(0,7).replace('-','');return`fr_rot_${t}_${COD}_${ym}`;}
+function chvG(t){return`fr_rot_${t}_${COD}`;}
+function salvar(){localStorage.setItem(chv('r'),JSON.stringify(roteiro));localStorage.setItem(chv('ag'),JSON.stringify(agendamentos));localStorage.setItem(chv('v'),JSON.stringify(visitas));localStorage.setItem(chvG('m'),JSON.stringify(memoria));}
+function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.getItem(chv('ag')),v=localStorage.getItem(chv('v')),m=localStorage.getItem(chvG('m'));roteiro=r?JSON.parse(r):{};agendamentos=a?JSON.parse(a):[];visitas=v?JSON.parse(v):{};memoria=m?JSON.parse(m):{};}
 
-function isUtil(date) {
-  const d = date instanceof Date ? date : new Date(date + 'T12:00:00');
-  const dow = d.getDay();
-  if (dow === 0 || dow === 6) return false;
-  const ds = d.toISOString().slice(0,10);
-  return !FERIADOS.has(ds);
-}
+// ── ALGORITMO ──────────────────────────────────────────────
+function gerarRoteiro(){
+  const ano=mesSel.getFullYear(),mes=mesSel.getMonth();
+  const hoje=ds(new Date()),util=diasUteis(ano,mes);
+  if(!util.length||!CLIENTES.length)return;
+  const novoRot={};
+  util.filter(d=>d<hoje).forEach(d=>{if(roteiro[d])novoRot[d]=roteiro[d];});
+  const futuros=util.filter(d=>d>=hoje);
+  const agFut=agendamentos.filter(a=>a.data>=hoje);
+  const visitNoMes=new Set();
+  Object.keys(visitas).forEach(k=>{const[,cid]=k.split(/_(.+)/);visitNoMes.add(cid);});
+  const clsOrd=[...CLIENTES].filter(c=>parseFloat(c.latitude)&&parseFloat(c.longitude)).sort((a,b)=>score(b)-score(a));
+  let pool=[...clsOrd];
+  const metaV=Math.max(0,CFG.metaVis-Object.keys(visitas).filter(k=>k.startsWith(ano+'-'+String(mes+1).padStart(2,'0'))).length);
+  const vpd=Math.ceil(metaV/Math.max(futuros.length,1));
+  let lastLoc=centroide(clsOrd);
+  let prospFeito=0;
 
-function dateStr(date) {
-  return date.toISOString().slice(0,10);
-}
+  futuros.forEach((data,idx)=>{
+    const agsHoje=agFut.filter(a=>a.data===data).sort((a,b)=>h2m(a.hora)-h2m(b.hora));
+    let tDisp=CFG.horaFim-CFG.horaIni-CFG.almocoMin-CFG.merch-agsHoje.reduce((s,a)=>s+parseInt(a.duracao||60),0);
+    const maxV=Math.min(vpd+2,Math.floor(tDisp/38));
+    let poolL=pool.filter(c=>!visitNoMes.has(c.cod_cliente+'_'+c.loja));
+    const clientesHoje=[];
+    let locAt=lastLoc;
 
-function diasUteisDoMes(ano, mes) {
-  const dias = [];
-  const d = new Date(ano, mes, 1);
-  while (d.getMonth() === mes) {
-    if (isUtil(d)) dias.push(dateStr(new Date(d)));
-    d.setDate(d.getDate() + 1);
-  }
-  return dias;
-}
-
-function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2-lat1)*Math.PI/180;
-  const dLon = (lon2-lon1)*Math.PI/180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
-function travelMin(c1, c2) {
-  if (!c1 || !c2) return 0;
-  const dist = haversineKm(
-    parseFloat(c1.latitude||c1.lat), parseFloat(c1.longitude||c1.lon),
-    parseFloat(c2.latitude||c2.lat), parseFloat(c2.longitude||c2.lon)
-  );
-  return Math.round((dist / CONFIG.velocidadeKmH) * 60) + CONFIG.tempoParking;
-}
-
-function clienteTempoVisita(c) {
-  let t = CONFIG.tempoClasse[c.classificacao] || CONFIG.tempoClasse[''];
-  if ((c.mix_produtos || 0) > 15) t += 15;
-  return Math.min(t, 120);
-}
-
-function minToHora(min) {
-  const h = Math.floor(min/60);
-  const m = min % 60;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-}
-
-function horaToMin(str) {
-  const [h,m] = str.split(':').map(Number);
-  return h*60 + (m||0);
-}
-
-// Pontuação de prioridade do cliente (maior = mais urgente visitar)
-function scorePrioridade(c, diaSelecionado) {
-  let score = 0;
-  // Classificação
-  const classScore = {A:40, B:25, C:15, '':8};
-  score += classScore[c.classificacao] || 8;
-  // Faturamento
-  const fat = c.fat_12m || 0;
-  if (fat > 50000) score += 20;
-  else if (fat > 20000) score += 12;
-  else if (fat > 5000) score += 6;
-  // Dias sem visita
-  if (c.ult_visita) {
-    const dias = Math.round((new Date() - new Date(c.ult_visita)) / 86400000);
-    score += Math.min(dias * 0.5, 25);
-  } else {
-    score += 30; // nunca visitado = alta prioridade
-  }
-  // Mix
-  if ((c.mix_produtos||0) > 10) score += 5;
-  // Memória do setor
-  const pref = memoria[c.cod_cliente + '_' + c.loja];
-  if (pref && pref.prioridade === 'alta') score += 15;
-  if (pref && pref.prioridade === 'baixa') score -= 10;
-  return score;
-}
-
-// =============================================
-// ALGORITMO DE ROTEIRIZAÇÃO
-// =============================================
-function gerarRoteiro() {
-  const ano = mesSelecionado.getFullYear();
-  const mes = mesSelecionado.getMonth();
-  const diasUteis = diasUteisDoMes(ano, mes);
-
-  if (diasUteis.length === 0 || clientes.length === 0) return;
-
-  // Copia roteiro atual (preserva dias já passados com resultado)
-  const hoje = dateStr(new Date());
-  const novoRoteiro = {};
-
-  // Mantém dias passados já realizados
-  diasUteis.forEach(d => {
-    if (d < hoje && roteiro[d] && roteiro[d].some(s => visitas[d+'_'+(s.clienteId||'')])) {
-      novoRoteiro[d] = roteiro[d];
-    }
-  });
-
-  // Dias restantes (hoje em diante)
-  const diasFuturos = diasUteis.filter(d => d >= hoje);
-
-  // Clientes já visitados no mês
-  const visitadosNoMes = new Set();
-  Object.keys(visitas).forEach(k => {
-    const [, cid] = k.split('_');
-    if (k.startsWith(ano+'-'+(String(mes+1).padStart(2,'0')))) visitadosNoMes.add(cid);
-  });
-
-  // Agendamentos fixos do mês (apenas futuros)
-  const agFuturos = agendamentos.filter(ag => ag.data >= hoje);
-
-  // Ordena clientes por prioridade
-  const clientesOrdenados = [...clientes]
-    .filter(c => parseFloat(c.latitude) && parseFloat(c.longitude))
-    .sort((a, b) => scorePrioridade(b, hoje) - scorePrioridade(a, hoje));
-
-  let pool = [...clientesOrdenados];
-  let visitasTotal = 0;
-  let horasChao = 0;
-  let prospTotal = 0;
-  let kmTotal = 0;
-
-  // Conta progresso já realizado
-  Object.values(visitas).forEach(v => { visitasTotal++; horasChao += 0.75; });
-
-  // Distribuição: dividir pool pelos dias futuros
-  // Quantos clientes por dia para atingir 100 visitas?
-  const visitasNecessarias = Math.max(0, CONFIG.minVisitas - visitasTotal);
-  const visitasPorDia = Math.ceil(visitasNecessarias / Math.max(diasFuturos.length, 1));
-
-  // Centróide do dia anterior (começa no centro do território)
-  const centroide = calcularCentroide(clientesOrdenados);
-  let ultimoLocal = centroide;
-
-  diasFuturos.forEach((data, idx) => {
-    const slots = [];
-    let cursor = CONFIG.horaInicio; // minutos desde meia-noite
-    let almocoFeito = false;
-
-    // Adiciona agendamentos fixos do dia (ordenados por hora)
-    const agsHoje = agFuturos
-      .filter(ag => ag.data === data)
-      .sort((a,b) => horaToMin(a.hora) - horaToMin(b.hora));
-
-    // Reserva slots de agendamento
-    agsHoje.forEach(ag => {
-      const cId = ag.clienteId;
-      const c = clientes.find(x => (x.cod_cliente+'_'+x.loja) === cId) || {nome_cliente: ag.nomeCliente};
-      slots.push({
-        tipo: 'agendamento',
-        horaIni: ag.hora,
-        horaFim: minToHora(horaToMin(ag.hora) + parseInt(ag.duracao||60)),
-        clienteId: cId,
-        nome: ag.nomeCliente || (c && c.nome_cliente) || '—',
-        duracao: parseInt(ag.duracao||60),
-        obs: ag.obs || '',
-        classificacao: c ? c.classificacao : '',
+    for(let i=0;i<maxV&&poolL.length>0&&tDisp>0;i++){
+      let best=null,bestSc=-Infinity;
+      poolL.slice(0,40).forEach(c=>{
+        const dist=haversine(parseFloat(locAt.latitude||0),parseFloat(locAt.longitude||0),parseFloat(c.latitude),parseFloat(c.longitude));
+        const tr=(dist/CFG.velKmH)*60,dur=cTempo(c);
+        if(tr+dur>tDisp)return;
+        const s=score(c)/100-dist/15;
+        if(s>bestSc){bestSc=s;best=c;}
       });
-    });
+      if(!best)break;
+      tDisp-=tMin(locAt,best)+cTempo(best);
+      clientesHoje.push(best);
+      visitNoMes.add(best.cod_cliente+'_'+best.loja);
+      poolL=poolL.filter(c=>c!==best);
+      pool=pool.filter(c=>c!==best);
+      locAt=best;
+    }
+    const ul=[...clientesHoje].reverse().find(c=>c.latitude);
+    if(ul)lastLoc=ul;
 
-    // Preenche com clientes do pool (nearest-neighbor)
-    let localAtual = ultimoLocal;
-    let clientesHoje = [];
+    // Monta slots
+    const slots=[];
+    let cur=CFG.horaIni,almOk=false;
 
-    // Calcula quantos clientes cabem no dia
-    let tempoDisponivel = CONFIG.horaFim - CONFIG.horaInicio - CONFIG.almocoMin - CONFIG.tempoMerchan;
-    if (agsHoje.length > 0) {
-      const tempoAgs = agsHoje.reduce((s,ag) => s + parseInt(ag.duracao||60), 0);
-      tempoDisponivel -= tempoAgs;
+    // Merchandising
+    slots.push({tipo:'merchandising',nome:'Merchandising',horaIni:m2h(cur),horaFim:m2h(cur+CFG.merch),duracao:CFG.merch,classificacao:''});
+    cur+=CFG.merch;
+
+    function tryAlmoco(c){
+      if(!almOk&&c>=CFG.almoco.ini&&c<=CFG.almoco.fim){
+        slots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(c),horaFim:m2h(c+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
+        almOk=true;return c+CFG.almocoMin;
+      }return c;
     }
 
-    const maxVisitasDia = Math.min(visitasPorDia + 1, Math.floor(tempoDisponivel / 40));
-
-    // Seleciona os clientes mais próximos e prioritários
-    let poolLocal = pool.filter(c => !visitadosNoMes.has(c.cod_cliente+'_'+c.loja));
-
-    for (let i = 0; i < maxVisitasDia && poolLocal.length > 0 && tempoDisponivel > 0; i++) {
-      // Nearest neighbor ponderado (distância + prioridade)
-      let melhor = null, melhorScore = -Infinity;
-      poolLocal.slice(0, 30).forEach(c => { // limita busca a top 30
-        const dist = haversineKm(
-          parseFloat(localAtual.latitude||localAtual.lat||0), parseFloat(localAtual.longitude||localAtual.lon||0),
-          parseFloat(c.latitude), parseFloat(c.longitude)
-        );
-        const travel = (dist / CONFIG.velocidadeKmH) * 60;
-        const dur = clienteTempoVisita(c);
-        if (travel + dur > tempoDisponivel) return;
-        const prioScore = scorePrioridade(c) / 100;
-        const distScore = -dist / 10;
-        const total = prioScore + distScore;
-        if (total > melhorScore) { melhorScore = total; melhor = c; }
-      });
-
-      if (!melhor) break;
-
-      const travel = travelMin(localAtual, melhor);
-      const dur = clienteTempoVisita(melhor);
-      tempoDisponivel -= (travel + dur);
-      kmTotal += haversineKm(
-        parseFloat(localAtual.latitude||localAtual.lat||0), parseFloat(localAtual.longitude||localAtual.lon||0),
-        parseFloat(melhor.latitude), parseFloat(melhor.longitude)
-      );
-
-      clientesHoje.push(melhor);
-      visitadosNoMes.add(melhor.cod_cliente+'_'+melhor.loja);
-      poolLocal = poolLocal.filter(c => c !== melhor);
-      pool = pool.filter(c => c !== melhor);
-      localAtual = melhor;
-    }
-
-    // Adiciona prospecção (2 por mês, nos primeiros 2 dias úteis com slot)
-    if (prospTotal < CONFIG.metaProspeccoes && idx < 5) {
-      slots.push({
-        tipo: 'prospeccao',
-        nome: 'Prospecção de novo cliente',
-        duracao: CONFIG.tempoPros,
-        classificacao: 'P',
-      });
-      prospTotal++;
-    }
-
-    // Monta timeline do dia com almoço e clientes
-    let cur = CONFIG.horaInicio;
-    const slotsFinais = [];
-
-    // Merchandising no início do dia
-    slotsFinais.push({tipo:'merchandising', nome:'Merchandising', horaIni:minToHora(cur), horaFim:minToHora(cur+CONFIG.tempoMerchan), duracao:CONFIG.tempoMerchan});
-    cur += CONFIG.tempoMerchan;
-
-    // Intercala agendamentos fixos e clientes do pool
-    const todosSlotsData = [
-      ...agsHoje.map(ag => ({...ag, tipo:'agendamento', nome: ag.nomeCliente})),
-      ...clientesHoje.map(c => ({tipo:'visita', cliente:c, nome:c.nome_cliente, classificacao:c.classificacao, clienteId:c.cod_cliente+'_'+c.loja}))
-    ];
-
-    // Ordena agendamentos por hora; visitas preenchem gaps
-    const agsOrdenados = agsHoje.sort((a,b) => horaToMin(a.hora) - horaToMin(b.hora));
-    const visitasPool = clientesHoje;
-    let vi = 0;
-
-    function inserirAlmoco(cursor) {
-      if (!almocoFeito && cursor >= CONFIG.almoco.ini && cursor <= CONFIG.almoco.fim) {
-        const fim = cursor + CONFIG.almocoMin;
-        slotsFinais.push({tipo:'almoco', nome:'Almoço', horaIni:minToHora(cursor), horaFim:minToHora(fim), duracao:CONFIG.almocoMin});
-        almocoFeito = true;
-        return fim;
+    // Intercala agendamentos e visitas
+    let vi=0;
+    for(const ag of agsHoje){
+      const agM=h2m(ag.hora);
+      while(vi<clientesHoje.length&&cur+cTempo(clientesHoje[vi])<agM){
+        cur=tryAlmoco(cur);
+        const c=clientesHoje[vi],d=cTempo(c);
+        slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(cur),horaFim:m2h(cur+d),duracao:d,classificacao:c.classificacao,lat:parseFloat(c.latitude),lon:parseFloat(c.longitude),municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos});
+        cur+=d;vi++;
       }
-      return cursor;
+      cur=tryAlmoco(cur);
+      if(agM>cur)cur=agM;
+      const d=parseInt(ag.duracao||60);
+      slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,horaIni:ag.hora,horaFim:m2h(h2m(ag.hora)+d),duracao:d,obs:ag.obs||'',classificacao:'',municipio:ag.municipio||''});
+      cur=h2m(ag.hora)+d;
     }
-
-    for (let ag of agsOrdenados) {
-      const agMin = horaToMin(ag.hora);
-      // Preenche com visitas antes do agendamento
-      while (vi < visitasPool.length && cur + travelMin({lat:0,lon:0}, visitasPool[vi]) + clienteTempoVisita(visitasPool[vi]) < agMin) {
-        cur = inserirAlmoco(cur);
-        const c = visitasPool[vi];
-        const dur = clienteTempoVisita(c);
-        slotsFinais.push({
-          tipo:'visita', clienteId:c.cod_cliente+'_'+c.loja, nome:c.nome_cliente,
-          horaIni:minToHora(cur), horaFim:minToHora(cur+dur), duracao:dur,
-          classificacao:c.classificacao, lat:parseFloat(c.latitude), lon:parseFloat(c.longitude),
-          fat12m:c.fat_12m, municipio:c.municipio
-        });
-        cur += dur;
-        vi++;
-      }
-      cur = inserirAlmoco(cur);
-      if (agMin > cur) cur = agMin;
-      const dur = parseInt(ag.duracao||60);
-      slotsFinais.push({
-        tipo:'agendamento', clienteId:ag.clienteId, nome:ag.nomeCliente,
-        horaIni:ag.hora, horaFim:minToHora(horaToMin(ag.hora)+dur), duracao:dur,
-        obs:ag.obs, classificacao:'',
-      });
-      cur = horaToMin(ag.hora) + dur;
+    while(vi<clientesHoje.length&&cur<CFG.horaFim){
+      cur=tryAlmoco(cur);
+      const c=clientesHoje[vi],d=cTempo(c);
+      if(cur+d>CFG.horaFim)break;
+      slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(cur),horaFim:m2h(cur+d),duracao:d,classificacao:c.classificacao,lat:parseFloat(c.latitude),lon:parseFloat(c.longitude),municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos});
+      cur+=d;vi++;
     }
-
-    // Adiciona visitas restantes
-    while (vi < visitasPool.length && cur < CONFIG.horaFim) {
-      cur = inserirAlmoco(cur);
-      const c = visitasPool[vi];
-      const dur = clienteTempoVisita(c);
-      if (cur + dur > CONFIG.horaFim) break;
-      slotsFinais.push({
-        tipo:'visita', clienteId:c.cod_cliente+'_'+c.loja, nome:c.nome_cliente,
-        horaIni:minToHora(cur), horaFim:minToHora(cur+dur), duracao:dur,
-        classificacao:c.classificacao, lat:parseFloat(c.latitude), lon:parseFloat(c.longitude),
-        fat12m:c.fat_12m, municipio:c.municipio
-      });
-      cur += dur;
-      vi++;
-    }
-
-    // Almoço no final se não foi feito
-    if (!almocoFeito) {
-      const idx = slotsFinais.findIndex(s => s.tipo==='visita');
-      const almMin = Math.min(CONFIG.almoco.fim, Math.max(CONFIG.almoco.ini, cur));
-      slotsFinais.splice(idx+1, 0, {tipo:'almoco', nome:'Almoço', horaIni:minToHora(almMin), horaFim:minToHora(almMin+CONFIG.almocoMin), duracao:CONFIG.almocoMin});
-    }
+    if(!almOk){const ai=slots.findIndex(s=>s.tipo==='visita');const am=Math.max(CFG.almoco.ini,Math.min(CFG.almoco.fim,cur));slots.splice(Math.max(ai+1,1),0,{tipo:'almoco',nome:'Almoço',horaIni:m2h(am),horaFim:m2h(am+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});}
 
     // Prospecção
-    const prospSlots = slots.filter(s => s.tipo==='prospeccao');
-    slotsFinais.push(...prospSlots.map(s => ({...s, horaIni:minToHora(CONFIG.horaFim-CONFIG.tempoPros), horaFim:minToHora(CONFIG.horaFim)})));
-
-    novoRoteiro[data] = slotsFinais;
-
-    // Atualiza último local para próximo dia
-    const ultimaVisita = [...slotsFinais].reverse().find(s => s.lat);
-    if (ultimaVisita) ultimoLocal = {latitude:ultimaVisita.lat, longitude:ultimaVisita.lon};
+    if(prospFeito<CFG.metaProsp&&idx<4){
+      slots.push({tipo:'prospeccao',nome:'Prospecção — novo cliente',horaIni:m2h(CFG.horaFim-CFG.pros),horaFim:m2h(CFG.horaFim),duracao:CFG.pros,classificacao:'',municipio:clientesHoje[0]?.municipio||''});
+      prospFeito++;
+    }
+    novoRot[data]=slots;
   });
 
-  roteiro = novoRoteiro;
-  salvarEstado();
-  renderTudo();
+  roteiro=novoRot;salvar();renderTudo();selecionarDia(diaSel);
 }
 
-function calcularCentroide(lista) {
-  if (!lista.length) return {latitude:-23.5, longitude:-46.6};
-  const lats = lista.map(c=>parseFloat(c.latitude)).filter(v=>!isNaN(v));
-  const lons = lista.map(c=>parseFloat(c.longitude)).filter(v=>!isNaN(v));
-  return {
-    latitude: lats.reduce((a,b)=>a+b,0)/lats.length,
-    longitude: lons.reduce((a,b)=>a+b,0)/lons.length
-  };
+// ── KM DO DIA ──────────────────────────────────────────────
+function kmDia(slots){
+  const pts=slots.filter(s=>s.lat&&s.lon);
+  let km=0;
+  for(let i=1;i<pts.length;i++)km+=haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);
+  return km;
 }
 
-// =============================================
-// RENDER
-// =============================================
-function renderTudo() {
-  renderMiniCal();
-  renderStats();
-  renderViewAtual();
+// ── RENDER GERAL ───────────────────────────────────────────
+function renderTudo(){renderMiniCal();renderStats();renderViewAtual();}
+function renderViewAtual(){
+  if(viewAtual==='dia')renderDia(diaSel);
+  else if(viewAtual==='semana')renderSemana();
+  else if(viewAtual==='mes')renderMes();
+  else renderResumo();
 }
 
-function renderViewAtual() {
-  if (viewAtual==='dia') renderDia(diaSelecionado);
-  else if (viewAtual==='semana') renderSemana();
-  else renderMes();
-}
-
-function renderMiniCal() {
-  const ano = mesSelecionado.getFullYear();
-  const mes = mesSelecionado.getMonth();
-  document.getElementById('labelMes').textContent =
-    mesSelecionado.toLocaleDateString('pt-BR', {month:'long', year:'numeric'}).replace(/^\w/, c=>c.toUpperCase());
-
-  const primeiro = new Date(ano, mes, 1);
-  const ultimo = new Date(ano, mes+1, 0);
-  const hoje = dateStr(new Date());
-  const selStr = dateStr(diaSelecionado);
-
-  let html = '';
-  // Dias do mês anterior para completar semana
-  for (let i = 0; i < primeiro.getDay(); i++) {
-    const d = new Date(ano, mes, 1 - (primeiro.getDay() - i));
-    html += `<div class="dia outro-mes">${d.getDate()}</div>`;
+// ── MINI CAL ───────────────────────────────────────────────
+function renderMiniCal(){
+  const ano=mesSel.getFullYear(),mes=mesSel.getMonth();
+  document.getElementById('labelMes').textContent=mesSel.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());
+  const prim=new Date(ano,mes,1),ult=new Date(ano,mes+1,0);
+  const hj=ds(new Date()),selStr=ds(diaSel);
+  let h='';
+  for(let i=0;i<prim.getDay();i++){const d=new Date(ano,mes,1-(prim.getDay()-i));h+=`<div class="dia-cell outro-mes">${d.getDate()}</div>`;}
+  for(let d=1;d<=ult.getDate();d++){
+    const date=new Date(ano,mes,d),dstr=ds(date),util=isUtil(date),rota=!!(roteiro[dstr]?.length);
+    let cls='dia-cell'+(util?'':' nao-util')+(dstr===hj?' hoje':'')+(dstr===selStr?' sel':'')+(rota?' tem-rota':'')+(dstr<hj?' passado':'');
+    h+=`<div class="${cls}" ${util?`onclick="selecionarDia(new Date('${dstr}T12:00:00'))"`:''}>${d}</div>`;
   }
-  for (let d = 1; d <= ultimo.getDate(); d++) {
-    const date = new Date(ano, mes, d);
-    const ds = dateStr(date);
-    const util = isUtil(date);
-    const temRota = roteiro[ds] && roteiro[ds].length > 0;
-    let cls = 'dia';
-    if (!util) cls += ' nao-util';
-    if (ds === hoje) cls += ' hoje';
-    if (ds === selStr) cls += ' selecionado';
-    if (temRota) cls += ' tem-rota';
-    if (ds < hoje) cls += ' passado';
-    html += `<div class="${cls}" onclick="${util?`selecionarDia(new Date('${ds}T12:00:00'))`:''}">${d}</div>`;
-  }
-  document.getElementById('miniCal').innerHTML = html;
+  document.getElementById('miniCal').innerHTML=h;
 }
 
-function renderStats() {
-  const ano = mesSelecionado.getFullYear();
-  const mes = mesSelecionado.getMonth();
-  const ym = `${ano}-${String(mes+1).padStart(2,'0')}`;
-
-  let visitasRealizadas = 0, horasChao = 0, prospRealizadas = 0, kmEst = 0;
-
-  // Conta do roteiro planejado
-  Object.entries(roteiro).forEach(([data, slots]) => {
-    if (!data.startsWith(ym)) return;
-    slots.forEach(s => {
-      if (s.tipo === 'visita') {
-        const chv = data+'_'+(s.clienteId||'');
-        if (visitas[chv]) { visitasRealizadas++; horasChao += s.duracao/60; }
-        kmEst += 10; // placeholder
-      }
-      if (s.tipo === 'prospeccao' && visitas[data+'_prospeccao']) prospRealizadas++;
+// ── STATS ──────────────────────────────────────────────────
+function renderStats(){
+  const ym=`${mesSel.getFullYear()}-${String(mesSel.getMonth()+1).padStart(2,'0')}`;
+  let vis=0,horas=0,pros=0,km=0;
+  Object.entries(roteiro).forEach(([data,slots])=>{
+    if(!data.startsWith(ym))return;
+    km+=kmDia(slots);
+    slots.forEach(s=>{
+      if(s.tipo==='visita'&&visitas[data+'_'+s.clienteId]){vis++;horas+=s.duracao/60;}
+      if(s.tipo==='prospeccao'&&visitas[data+'_prospeccao'])pros++;
     });
   });
-
-  const setarStat = (id, val, meta, classOk='ok') => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = val;
-    const paren = el.closest('.stat');
-    if (paren) paren.className = 'stat ' + (val >= meta ? classOk : (val >= meta*0.5 ? 'warn' : ''));
-  };
-
-  setarStat('stVisitas', visitasRealizadas, CONFIG.minVisitas);
-  setarStat('stHoras', horasChao.toFixed(1)+'h', CONFIG.minHorasChao);
-  setarStat('stProsp', prospRealizadas, CONFIG.metaProspeccoes);
-  document.getElementById('stKm').textContent = '~'+Math.round(kmEst)+'km';
+  const set=(id,v,meta,boxId)=>{document.getElementById(id).textContent=v;const b=document.getElementById(boxId);if(b){b.className='stat-box'+(parseFloat(v)>=meta?' ok':parseFloat(v)>=meta*.5?' warn':'');}};
+  set('stVis',vis,CFG.metaVis,'stVisBox');
+  set('stH',horas.toFixed(1)+'h',CFG.metaH,'stHBox');
+  set('stP',pros,CFG.metaProsp,'stPBox');
+  document.getElementById('stKm').textContent='~'+Math.round(km)+'km';
 }
 
-// =============================================
-// VIEW DIA
-// =============================================
-function selecionarDia(date) {
-  diaSelecionado = date instanceof Date ? date : new Date(date+'T12:00:00');
+// ── VIEW DIA ───────────────────────────────────────────────
+function selecionarDia(d){
+  diaSel=d instanceof Date?d:new Date(d+'T12:00:00');
   renderMiniCal();
-  if (viewAtual==='dia') renderDia(diaSelecionado);
-  renderResumoDia();
+  if(viewAtual==='dia')renderDia(diaSel);
+  renderSbDia();
 }
 
-function renderDia(date) {
-  const ds = dateStr(date);
-  const slots = roteiro[ds] || [];
-  const tl = document.getElementById('timeline');
+function renderDia(date){
+  const dstr=ds(date),slots=roteiro[dstr]||[];
+  const hoje=ds(new Date());
 
-  const nomeData = date.toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
-  let html = `<div class="timeline-header">${nomeData.charAt(0).toUpperCase()+nomeData.slice(1)}</div>`;
+  // Cards resumo
+  const visSlots=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
+  const km=Math.round(kmDia(slots));
+  const cidades=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
+  const proSlots=slots.filter(s=>s.tipo==='prospeccao');
 
-  if (!isUtil(date)) {
-    html += `<div class="msg-centro" style="padding:30px;">Não é dia útil.</div>`;
-    tl.innerHTML = html;
-    atualizarMapa([]);
-    return;
-  }
+  document.getElementById('dcClientes').textContent=visSlots.length||'—';
+  document.getElementById('dcKm').textContent=km?km+'km':'—';
+  document.getElementById('dcCidades').textContent=cidades.length?cidades.join(' · '):'—';
+  document.getElementById('dcPros').textContent=proSlots.length?'🌱 Prospecção: '+(proSlots[0].municipio||'ver roteiro'):'';
 
-  if (slots.length === 0) {
-    html += `<div class="msg-centro" style="padding:20px;">Nenhuma roteirização para este dia.<br><br>
-      <small style="color:var(--muted)">Clique em "Fazer Roteirização" para gerar o roteiro do mês.</small></div>`;
-    tl.innerHTML = html;
-    atualizarMapa([]);
-    return;
-  }
+  const nomeData=nomeDataLongo(date);
+  document.getElementById('tlData').textContent=nomeData.charAt(0).toUpperCase()+nomeData.slice(1);
+  document.getElementById('tlDataCompleta').textContent=dstr===hoje?'HOJE':'';
 
-  const hoje = dateStr(new Date()) === ds;
-  slots.forEach((s, i) => {
-    const chv = ds+'_'+(s.clienteId||'');
-    const realizado = !!visitas[chv];
-    let cls = `slot ${s.tipo==='agendamento'?'agendado':s.tipo==='prospeccao'?'prospecto':s.tipo==='almoco'?'almoco':s.tipo==='merchandising'?'merchandising':''}`;
-    if (s.classificacao) cls += ` classe-${s.classificacao}`;
-    if (realizado) cls += ' realizado';
+  const tl=document.getElementById('timeline');
 
-    let tags = '';
-    if (s.classificacao && s.tipo==='visita') tags += `<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
-    if (s.tipo==='agendamento') tags += `<span class="tag tag-ag">Agendado</span>`;
-    if (realizado) tags += `<span class="tag tag-real">✓ Realizado</span>`;
+  if(!isUtil(date)){tl.innerHTML=`<div class="empty-day"><div class="ei">🏖️</div><p>Não é dia útil.</p></div>`;return;}
+  if(!slots.length){tl.innerHTML=`<div class="empty-day"><div class="ei">📭</div><p>Nenhuma roteirização para este dia.<br><small>Clique em <b>Fazer Roteirização</b> para gerar o roteiro do mês.</small></p></div>`;return;}
 
-    let btnReal = '';
-    if ((s.tipo==='visita'||s.tipo==='agendamento') && (hoje || ds < dateStr(new Date()))) {
-      btnReal = `<button class="realizado-btn ${realizado?'sim':'nao'}"
-        onclick="event.stopPropagation();abrirModalVisita('${ds}',${i})">${realizado?'✓ OK':'Registrar'}</button>`;
-    }
+  const podeRegistrar=dstr<=hoje;
+  let h='';
+  slots.forEach((s,i)=>{
+    const chave=dstr+'_'+(s.clienteId||s.tipo);
+    const real=!!visitas[chave];
+    const corSide=CORES_CLASSE[s.tipo==='visita'?s.classificacao:s.tipo]||'#94a3b8';
+    let tags='';
+    if(s.tipo==='visita'&&s.classificacao)tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
+    if(s.tipo==='agendamento')tags+=`<span class="tag tag-ag">Agendado</span>`;
+    if(s.tipo==='prospeccao')tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;
+    if(s.tipo==='merchandising')tags+=`<span class="tag tag-merch">Merchandising</span>`;
+    if(real)tags+=`<span class="tag tag-real">✓ Realizado</span>`;
 
-    const detalhe = s.municipio ? s.municipio : (s.obs ? s.obs : (s.fat12m ? `R$ ${(s.fat12m/1000).toFixed(1)}k/ano` : ''));
+    let sub='';
+    if(s.municipio)sub+=`<span>📍 ${s.municipio}</span>`;
+    if(s.fat12m)sub+=`<span>R$ ${(s.fat12m/1000).toFixed(1)}k/ano</span>`;
+    if(s.mix)sub+=`<span>${s.mix} produtos</span>`;
+    if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;
 
-    html += `<div class="${cls}" onclick="clicarSlot('${ds}',${i})">
-      <div class="slot-hora">${s.horaIni||''}<br><small>${s.duracao||''}min</small></div>
-      <div class="slot-info" style="flex:1">
-        <div class="nome">${s.nome||'—'}</div>
-        ${detalhe?`<div class="detalhe">${detalhe}</div>`:''}
-        <div class="tags">${tags}</div>
+    const btnReg=podeRegistrar&&(s.tipo==='visita'||s.tipo==='agendamento'||s.tipo==='prospeccao')?
+      `<button class="btn-reg ${real?'sim':'nao'}" onclick="event.stopPropagation();abrirResultado('${dstr}',${i})">${real?'✓ OK':'Registrar'}</button>`:'';
+
+    h+=`<div class="slot-card tipo-${s.tipo} classe-${s.classificacao||''} ${real?'realizado':''}" onclick="abrirResultado('${dstr}',${i})">
+      <div class="slot-side" style="background:${corSide}"></div>
+      <div class="slot-body">
+        <div class="slot-hora-col">
+          <div class="hora">${s.horaIni||''}</div>
+          <div class="dur">${s.duracao}min</div>
+        </div>
+        <div class="slot-divider"></div>
+        <div class="slot-info">
+          <div class="slot-nome">${s.nome||'—'}</div>
+          ${sub?`<div class="slot-sub">${sub}</div>`:''}
+          ${tags?`<div class="slot-tags">${tags}</div>`:''}
+        </div>
+        <div class="slot-right">${btnReg}</div>
       </div>
-      ${btnReal}
     </div>`;
   });
-
-  tl.innerHTML = html;
-  atualizarMapa(slots);
+  tl.innerHTML=h;
 }
 
-function renderResumoDia() {
-  const ds = dateStr(diaSelecionado);
-  const slots = roteiro[ds] || [];
-  const div = document.getElementById('resumoDia');
-  if (slots.length === 0) { div.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sem roteiro para este dia.</div>'; return; }
-  const visitas_dia = slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').length;
-  const hChao = slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').reduce((a,s)=>a+(s.duracao||0),0)/60;
-  div.innerHTML = `<div style="font-size:.85rem">
-    <b>${visitas_dia}</b> visitas · <b>${hChao.toFixed(1)}h</b> chão de loja
+function renderSbDia(){
+  const dstr=ds(diaSel),slots=roteiro[dstr]||[];
+  const div=document.getElementById('sbDiaResumo');
+  if(!slots.length){div.textContent='Sem roteiro para este dia.';return;}
+  const vis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').length;
+  const km=Math.round(kmDia(slots));
+  const cidades=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
+  div.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px;">
+    <div class="resumo-cidade"><span class="cidade-dot" style="background:var(--azul)"></span><b>${vis}</b> visita${vis!==1?'s':''}</div>
+    <div class="resumo-cidade"><span class="cidade-dot" style="background:var(--verde)"></span><b>~${km}km</b> estimado</div>
+    ${cidades.map(c=>`<div class="resumo-cidade"><span class="cidade-dot" style="background:var(--muted)"></span>${c}</div>`).join('')}
   </div>`;
 }
 
-// =============================================
-// MAPA LEAFLET
-// =============================================
-let mapaLayers = [];
-
-function atualizarMapa(slots) {
-  mapaLayers.forEach(l => map.removeLayer(l));
-  mapaLayers = [];
-
-  const pontos = slots.filter(s => s.lat && s.lon);
-  if (pontos.length === 0) return;
-
-  const cores = {A:'#dc2626', B:'#ea580c', C:'#ca8a04', '':'#6b7280', P:'#16a34a'};
-  const latlngs = [];
-
-  pontos.forEach((s, i) => {
-    const cor = cores[s.classificacao] || '#2B2FA8';
-    const icon = L.divIcon({
-      html: `<div style="background:${cor};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)">${i+1}</div>`,
-      className: '', iconSize: [28,28], iconAnchor: [14,14]
-    });
-    const marker = L.marker([s.lat, s.lon], {icon})
-      .bindPopup(`<b>${s.nome}</b><br>${s.horaIni} – ${s.horaFim}<br>${s.duracao} min`)
-      .addTo(map);
-    mapaLayers.push(marker);
-    latlngs.push([s.lat, s.lon]);
-  });
-
-  if (latlngs.length > 1) {
-    const linha = L.polyline(latlngs, {color:'#2B2FA8', weight:2.5, opacity:.6, dashArray:'6,4'}).addTo(map);
-    mapaLayers.push(linha);
-  }
-
-  if (latlngs.length > 0) map.fitBounds(latlngs, {padding:[30,30]});
-}
-
-// =============================================
-// VIEW SEMANA
-// =============================================
-function renderSemana() {
-  const inicio = getSemanaInicio(diaSelecionado);
-  const grid = document.getElementById('semanaGrid');
-  let html = '';
-  const hoje = dateStr(new Date());
-
-  for (let i = 0; i < 5; i++) {
-    const d = new Date(inicio);
-    d.setDate(d.getDate() + i);
-    const ds = dateStr(d);
-    const slots = roteiro[ds] || [];
-    const dNome = d.toLocaleDateString('pt-BR', {weekday:'short', day:'numeric'});
-    const cls = ds === hoje ? 'hoje-h' : ds < hoje ? 'passado-h' : '';
-
-    html += `<div class="dia-col">
-      <div class="dia-col-header ${cls}">${dNome}</div>
-      <div class="dia-col-body">`;
-
-    if (!isUtil(d)) { html += `<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">—</div>`; }
-    else if (slots.length === 0) { html += `<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">Sem roteiro</div>`; }
-    else {
-      slots.filter(s=>s.tipo!=='almoco').forEach(s => {
-        const cor = {A:'#fef2f2',B:'#fff7ed',C:'#fefce8','':'#f8fafc',agendamento:'#eff6ff',merchandising:'#f5f3ff',prospeccao:'#f0fdf4'}[s.tipo==='visita'?s.classificacao:s.tipo] || '#f8fafc';
-        const borda = {A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#94a3b8',agendamento:'#2B2FA8',merchandising:'#8b5cf6',prospeccao:'#16a34a'}[s.tipo==='visita'?s.classificacao:s.tipo] || '#94a3b8';
-        html += `<div class="slot-mini" style="background:${cor};border-left-color:${borda}" onclick="selecionarDia(new Date('${ds}T12:00:00'));setView('dia')">
-          <div class="h">${s.horaIni||''}</div>
-          <div class="n">${s.nome||''}</div>
+// ── VIEW SEMANA ─────────────────────────────────────────────
+function renderSemana(){
+  const ini=semanaIni(diaSel),hoje=ds(new Date());
+  let h='';
+  for(let i=0;i<5;i++){
+    const d=new Date(ini);d.setDate(d.getDate()+i);
+    const dstr=ds(d),slots=roteiro[dstr]||[];
+    const nomeD=d.toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short'});
+    const hCls=dstr===hoje?'hoje-h':dstr<hoje?'passado-h':'';
+    h+=`<div class="sem-col"><div class="sem-col-head ${hCls}">${nomeD}</div><div class="sem-col-body">`;
+    if(!isUtil(d)){h+=`<div style="text-align:center;padding:16px;font-size:.75rem;color:var(--muted)">—</div>`;}
+    else if(!slots.length){h+=`<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">Sem roteiro</div>`;}
+    else{
+      slots.filter(s=>s.tipo!=='almoco').forEach(s=>{
+        const borda=CORES_CLASSE[s.tipo==='visita'?s.classificacao:s.tipo]||'#94a3b8';
+        h+=`<div class="sem-slot" style="border-left-color:${borda}" onclick="selecionarDia(new Date('${dstr}T12:00:00'));setView('dia')">
+          <div class="sh">${s.horaIni||''} · ${s.duracao}min</div>
+          <div class="sn">${s.nome||''}</div>
+          ${s.municipio?`<div class="sc">📍 ${s.municipio}</div>`:''}
         </div>`;
       });
     }
-    html += `</div></div>`;
+    h+=`</div></div>`;
   }
-  grid.innerHTML = html;
+  document.getElementById('semanaGrid').innerHTML=h;
 }
+function semanaIni(d){const x=new Date(d),dw=x.getDay();x.setDate(x.getDate()-(dw===0?6:dw-1));return x;}
 
-function getSemanaInicio(date) {
-  const d = new Date(date);
-  const dow = d.getDay();
-  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1)); // segunda
-  return d;
-}
-
-// =============================================
-// VIEW MÊS
-// =============================================
-function renderMes() {
-  const ano = mesSelecionado.getFullYear();
-  const mes = mesSelecionado.getMonth();
-  const grid = document.getElementById('mesGrid');
-  const hoje = dateStr(new Date());
-  const selStr = dateStr(diaSelecionado);
-
-  const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-  let html = dias.map(d=>`<div class="mes-header-col">${d}</div>`).join('');
-
-  const primeiro = new Date(ano, mes, 1);
-  const ultimo = new Date(ano, mes+1, 0);
-
-  // Dias do mês anterior
-  for (let i = 0; i < primeiro.getDay(); i++) {
-    html += `<div class="mes-dia outro-m nao-util-m"></div>`;
-  }
-
-  for (let d = 1; d <= ultimo.getDate(); d++) {
-    const date = new Date(ano, mes, d);
-    const ds = dateStr(date);
-    const util = isUtil(date);
-    const slots = (roteiro[ds]||[]).filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
-    let cls = 'mes-dia';
-    if (!util) cls += ' nao-util-m';
-    if (ds === hoje) cls += ' hoje-m';
-    if (ds === selStr) cls += ' selecionado';
-
-    let chips = '';
-    slots.slice(0,3).forEach(s => {
-      const ag = s.tipo==='agendamento';
-      chips += `<div class="visita-chip ${ag?'agend':''}">${s.nome?s.nome.split(' ')[0]:''}</div>`;
-    });
-    if (slots.length > 3) chips += `<div class="visita-chip">+${slots.length-3}</div>`;
-
-    html += `<div class="${cls}" onclick="${util?`selecionarDia(new Date('${ds}T12:00:00'));setView('dia')`:''}" >
-      <div class="num">${d}</div>
-      ${chips}
+// ── VIEW MÊS ───────────────────────────────────────────────
+function renderMes(){
+  const ano=mesSel.getFullYear(),mes=mesSel.getMonth();
+  const hoje=ds(new Date()),selStr=ds(diaSel);
+  const dias=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  let h=dias.map(d=>`<div class="mes-hd">${d}</div>`).join('');
+  const prim=new Date(ano,mes,1),ult=new Date(ano,mes+1,0);
+  for(let i=0;i<prim.getDay();i++)h+=`<div class="mes-cel outro-m"></div>`;
+  for(let d=1;d<=ult.getDate();d++){
+    const date=new Date(ano,mes,d),dstr=ds(date),util=isUtil(date);
+    const slots=(roteiro[dstr]||[]).filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
+    let cls='mes-cel'+(util?'':' nao-util-m')+(dstr===hoje?' hoje-m':'');
+    let chips=slots.slice(0,2).map(s=>`<div class="mchip ${s.tipo==='agendamento'?'ag':''}">${s.nome?s.nome.split(' ')[0]:''}</div>`).join('');
+    if(slots.length>2)chips+=`<div class="mchip">+${slots.length-2}</div>`;
+    h+=`<div class="${cls}" onclick="${util?`selecionarDia(new Date('${dstr}T12:00:00'));setView('dia')`:''}">
+      <div class="mn">${d}</div>${chips}
     </div>`;
   }
-
-  grid.innerHTML = html;
+  document.getElementById('mesGrid').innerHTML=h;
 }
 
-// =============================================
-// AGENDAMENTO
-// =============================================
-function abrirModalAgendamento() {
-  clienteSelecionadoAgendamento = null;
-  document.getElementById('agCliente').value = '';
-  document.getElementById('listaClientes').style.display = 'none';
-  document.getElementById('agData').value = dateStr(diaSelecionado);
-  document.getElementById('agHora').value = '10:00';
-  document.getElementById('agDuracao').value = '60';
-  document.getElementById('agObs').value = '';
-  document.getElementById('overlayAgendamento').style.display = 'flex';
-}
+// ── VIEW RESUMO ─────────────────────────────────────────────
+function renderResumo(){
+  const ym=`${mesSel.getFullYear()}-${String(mesSel.getMonth()+1).padStart(2,'0')}`;
+  const diasMes=Object.keys(roteiro).filter(d=>d.startsWith(ym)).sort();
+  let totalVis=0,totalKm=0,totalH=0,totalPros=0,cidadesSet=new Set();
+  const contClasse={A:0,B:0,C:0,'':0};
 
-function fecharModal() {
-  document.getElementById('overlayAgendamento').style.display = 'none';
-}
-
-function filtrarClientes(texto) {
-  const lista = document.getElementById('listaClientes');
-  if (texto.length < 2) { lista.style.display='none'; return; }
-  const matches = clientes.filter(c =>
-    c.nome_cliente.toLowerCase().includes(texto.toLowerCase()) ||
-    c.cod_cliente.includes(texto)
-  ).slice(0,8);
-
-  if (matches.length === 0) { lista.style.display='none'; return; }
-
-  lista.innerHTML = matches.map(c => `
-    <div onclick="selecionarClienteAg('${c.cod_cliente}_${c.loja}','${c.nome_cliente.replace(/'/g,"&#39;")}')"
-      style="padding:8px 10px;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border)">
-      <b>${c.nome_cliente}</b> <span style="color:var(--muted)">${c.municipio}</span>
-    </div>`).join('');
-  lista.style.display = 'block';
-}
-
-function selecionarClienteAg(id, nome) {
-  clienteSelecionadoAgendamento = {id, nome};
-  document.getElementById('agCliente').value = nome;
-  document.getElementById('listaClientes').style.display = 'none';
-}
-
-function salvarAgendamento() {
-  if (!clienteSelecionadoAgendamento) {
-    alert('Selecione um cliente da lista.');
-    return;
-  }
-  const ag = {
-    clienteId: clienteSelecionadoAgendamento.id,
-    nomeCliente: clienteSelecionadoAgendamento.nome,
-    data: document.getElementById('agData').value,
-    hora: document.getElementById('agHora').value,
-    duracao: parseInt(document.getElementById('agDuracao').value),
-    obs: document.getElementById('agObs').value,
-  };
-  agendamentos.push(ag);
-  salvarEstado();
-  fecharModal();
-  // Refaz roteiro automaticamente incorporando o agendamento
-  gerarRoteiro();
-}
-
-// =============================================
-// RESULTADO DE VISITA
-// =============================================
-function abrirModalVisita(data, idx) {
-  slotParaResultado = {data, idx};
-  const s = (roteiro[data]||[])[idx];
-  document.getElementById('visitaClienteNome').textContent = s ? s.nome : '—';
-  document.getElementById('visitaResultado').value = 'pedido';
-  document.getElementById('visitaValor').value = '';
-  document.getElementById('visitaObs').value = '';
-  document.getElementById('overlayVisita').style.display = 'flex';
-}
-
-function fecharModalVisita() {
-  document.getElementById('overlayVisita').style.display = 'none';
-  slotParaResultado = null;
-}
-
-function salvarResultado() {
-  if (!slotParaResultado) return;
-  const {data, idx} = slotParaResultado;
-  const s = (roteiro[data]||[])[idx];
-  if (!s) return;
-  const chv = data+'_'+(s.clienteId||'');
-  visitas[chv] = {
-    resultado: document.getElementById('visitaResultado').value,
-    valor: parseFloat(document.getElementById('visitaValor').value)||0,
-    obs: document.getElementById('visitaObs').value,
-    registradoEm: new Date().toISOString()
-  };
-  // Atualiza memória de longo prazo
-  if (s.clienteId) {
-    if (!memoria[s.clienteId]) memoria[s.clienteId] = {};
-    memoria[s.clienteId].ultimoResultado = visitas[chv].resultado;
-    memoria[s.clienteId].ultimaVisita = data;
-  }
-  salvarEstado();
-  fecharModalVisita();
-  renderTudo();
-}
-
-function clicarSlot(data, idx) {
-  const s = (roteiro[data]||[])[idx];
-  if (!s || s.tipo==='almoco'||s.tipo==='merchandising') return;
-  abrirModalVisita(data, idx);
-}
-
-// =============================================
-// SENHA E ROTEIRIZAÇÃO
-// =============================================
-function pedirSenhaRoteirizar() {
-  document.getElementById('senhaRoteirizar').value = '';
-  document.getElementById('senhaErr').style.display = 'none';
-  document.getElementById('senhaOverlay').classList.add('show');
-  setTimeout(() => document.getElementById('senhaRoteirizar').focus(), 100);
-}
-
-async function confirmarRoteirizacao() {
-  const v = document.getElementById('senhaRoteirizar').value;
-  const h = await sha256(v);
-  if (h !== hashRoteirizacaoCalculado) {
-    document.getElementById('senhaErr').style.display = 'block';
-    return;
-  }
-  document.getElementById('senhaOverlay').classList.remove('show');
-  document.getElementById('timeline').innerHTML = '<div class="msg-centro"><div class="spinner"></div><div>Gerando roteiro...</div></div>';
-  setTimeout(() => { gerarRoteiro(); renderTudo(); }, 100);
-}
-
-document.getElementById('senhaRoteirizar').addEventListener('keydown', e => {
-  if (e.key==='Enter') confirmarRoteirizacao();
-});
-
-// =============================================
-// TABS / VIEWS
-// =============================================
-function setView(v) {
-  viewAtual = v;
-  ['dia','semana','mes'].forEach(x => {
-    document.getElementById('view'+x.charAt(0).toUpperCase()+x.slice(1)).style.display = x===v?'flex':'none';
-    document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).className = 'tab'+(x===v?' ativo':'');
+  diasMes.forEach(data=>{
+    const slots=roteiro[data]||[];
+    totalKm+=kmDia(slots);
+    slots.forEach(s=>{
+      if(s.tipo==='visita'){totalVis++;totalH+=s.duracao/60;contClasse[s.classificacao||'']=(contClasse[s.classificacao||'']||0)+1;if(s.municipio)cidadesSet.add(s.municipio);}
+      if(s.tipo==='agendamento'){totalVis++;totalH+=s.duracao/60;}
+      if(s.tipo==='prospeccao')totalPros++;
+    });
   });
-  if (v==='dia') renderDia(diaSelecionado);
-  else if (v==='semana') renderSemana();
-  else renderMes();
+
+  const pVisitas=Math.min(100,Math.round(totalVis/CFG.metaVis*100));
+  const pH=Math.min(100,Math.round(totalH/CFG.metaH*100));
+  const pPros=Math.min(100,Math.round(totalPros/CFG.metaProsp*100));
+
+  document.getElementById('resumoCards').innerHTML=`
+    <div class="res-card">
+      <h4>METAS DO MÊS</h4>
+      <div class="res-list">
+        <div class="res-item"><span class="ri-label">Visitas planejadas</span><span class="ri-val">${totalVis} / ${CFG.metaVis}</span></div>
+        <div class="progress-bar"><div class="progress-fill ${pVisitas>=100?'ok':pVisitas>=50?'':'warn'}" style="width:${pVisitas}%"></div></div>
+        <div class="res-item"><span class="ri-label">H. chão de loja</span><span class="ri-val">${totalH.toFixed(1)}h / ${CFG.metaH}h</span></div>
+        <div class="progress-bar"><div class="progress-fill ${pH>=100?'ok':''}" style="width:${pH}%"></div></div>
+        <div class="res-item"><span class="ri-label">Prospecções</span><span class="ri-val">${totalPros} / ${CFG.metaProsp}</span></div>
+        <div class="progress-bar"><div class="progress-fill ${pPros>=100?'ok':''}" style="width:${pPros}%"></div></div>
+      </div>
+    </div>
+    <div class="res-card">
+      <h4>COBERTURA</h4>
+      <div class="res-big">~${Math.round(totalKm)}km</div>
+      <div class="res-sub">Distância total estimada</div>
+      <div class="res-list" style="margin-top:12px">
+        <div class="res-item"><span class="ri-label">Dias com roteiro</span><span class="ri-val">${diasMes.length}</span></div>
+        <div class="res-item"><span class="ri-label">Cidades cobertas</span><span class="ri-val">${cidadesSet.size}</span></div>
+        <div class="res-item"><span class="ri-label">Média visitas/dia</span><span class="ri-val">${diasMes.length?(totalVis/diasMes.length).toFixed(1):'—'}</span></div>
+      </div>
+    </div>
+    <div class="res-card">
+      <h4>CLIENTES POR NÍVEL</h4>
+      ${[['A','Nível A (top)','var(--vermelho)'],['B','Nível B','var(--laranja)'],['C','Nível C','var(--amarelo)'],['','Sem classificação','var(--muted)']].map(([cls,lbl,cor])=>`
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:${cor};flex-shrink:0"></div>
+          <span style="flex:1;font-size:.8rem;color:var(--muted)">${lbl}</span>
+          <span style="font-weight:700;font-size:.88rem">${contClasse[cls]||0}</span>
+        </div>`).join('')}
+    </div>
+  `;
+
+  let hDias='';
+  diasMes.forEach(data=>{
+    const slots=roteiro[data]||[];
+    const vis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
+    const km=Math.round(kmDia(slots));
+    const cids=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
+    const pros=slots.filter(s=>s.tipo==='prospeccao');
+    const date=new Date(data+'T12:00:00');
+    const nome=date.toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short'});
+    hDias+=`<div class="dia-resumo-row" onclick="selecionarDia(new Date('${data}T12:00:00'));setView('dia')">
+      <div class="dr-data">${nome}</div>
+      <div class="dr-chips">
+        <span class="dr-chip">${vis.length} clientes</span>
+        <span class="dr-chip verde">~${km}km</span>
+        ${cids.map(c=>`<span class="dr-chip">${c}</span>`).join('')}
+        ${pros.length?`<span class="dr-chip verde">🌱 ${pros[0].municipio||'prospecção'}</span>`:''}
+      </div>
+    </div>`;
+  });
+  document.getElementById('resumoDiaDia').innerHTML=hDias||`<div style="text-align:center;padding:32px;color:var(--muted);">Sem roteiro gerado ainda.</div>`;
 }
 
-function mudarMes(delta) {
-  mesSelecionado.setMonth(mesSelecionado.getMonth() + delta);
-  mesSelecionado.setDate(1);
-  carregarEstado();
-  renderTudo();
+// ── MAPA FLUTUANTE ──────────────────────────────────────────
+function abrirMapa(){
+  if(!mapaModal){mapaModal=L.map('mapaModal',{zoomControl:true});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(mapaModal);}
+  document.getElementById('mapaOverlay').classList.add('show');
+  setTimeout(()=>{mapaModal.invalidateSize();renderMapa();},200);
+}
+function fecharMapa(){document.getElementById('mapaOverlay').classList.remove('show');}
+
+let mapaLayers=[];
+function renderMapa(){
+  mapaLayers.forEach(l=>mapaModal.removeLayer(l));mapaLayers=[];
+  const dstr=ds(diaSel),slots=(roteiro[dstr]||[]).filter(s=>s.lat&&s.lon);
+  document.getElementById('mapaTitle').textContent='Roteiro — '+nomeDataLongo(diaSel);
+  if(!slots.length){mapaModal.setView([-23.5,-46.6],10);return;}
+  const CORES={A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#6b7280'};
+  const ll=[];
+  slots.forEach((s,i)=>{
+    const cor=CORES[s.classificacao]||'#2B2FA8';
+    const icon=L.divIcon({html:`<div style="background:${cor};color:#fff;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)">${i+1}</div>`,className:'',iconSize:[30,30],iconAnchor:[15,15]});
+    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b><br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni} – ${s.horaFim} (${s.duracao}min)`).addTo(mapaModal);
+    mapaLayers.push(mk);ll.push([s.lat,s.lon]);
+  });
+  if(ll.length>1){const ln=L.polyline(ll,{color:'#2B2FA8',weight:3,opacity:.65,dashArray:'8,5'}).addTo(mapaModal);mapaLayers.push(ln);}
+  if(ll.length)mapaModal.fitBounds(ll,{padding:[40,40]});
 }
 
-// =============================================
-// START
-// =============================================
+// ── AGENDAMENTO ─────────────────────────────────────────────
+function abrirAgendamento(){
+  clienteAgendamento=null;
+  document.getElementById('agCliente').value='';
+  document.getElementById('agLista').style.display='none';
+  document.getElementById('agData').value=ds(diaSel);
+  document.getElementById('agHora').value='10:00';
+  document.getElementById('agDuracao').value='60';
+  document.getElementById('agObs').value='';
+  document.getElementById('ovAgendamento').classList.remove('hidden');
+}
+function fecharAg(){document.getElementById('ovAgendamento').classList.add('hidden');}
+
+function filtrarClientesAg(txt){
+  const lista=document.getElementById('agLista');
+  if(txt.length<2){lista.style.display='none';return;}
+  const ms=CLIENTES.filter(c=>c.nome_cliente.toLowerCase().includes(txt.toLowerCase())||c.cod_cliente.includes(txt)).slice(0,8);
+  if(!ms.length){lista.style.display='none';return;}
+  lista.innerHTML=ms.map(c=>`<div class="autocomplete-item" onclick="selClienteAg('${c.cod_cliente}_${c.loja}','${c.nome_cliente.replace(/'/g,"&#39;")}','${c.municipio||''}')"><b>${c.nome_cliente}</b> <span style="color:var(--muted);font-size:.75rem">${c.municipio}</span></div>`).join('');
+  lista.style.display='block';
+}
+function selClienteAg(id,nome,municipio){clienteAgendamento={id,nome,municipio};document.getElementById('agCliente').value=nome;document.getElementById('agLista').style.display='none';}
+
+function salvarAg(){
+  if(!clienteAgendamento){alert('Selecione um cliente da lista.');return;}
+  agendamentos.push({clienteId:clienteAgendamento.id,nomeCliente:clienteAgendamento.nome,municipio:clienteAgendamento.municipio,data:document.getElementById('agData').value,hora:document.getElementById('agHora').value,duracao:parseInt(document.getElementById('agDuracao').value),obs:document.getElementById('agObs').value});
+  salvar();fecharAg();gerarRoteiro();
+}
+
+// ── RESULTADO ───────────────────────────────────────────────
+function abrirResultado(data,idx){
+  const s=(roteiro[data]||[])[idx];
+  if(!s||s.tipo==='almoco'||s.tipo==='merchandising')return;
+  slotResultado={data,idx};
+  document.getElementById('resNome').textContent=s.nome||'—';
+  const chave=data+'_'+(s.clienteId||s.tipo);
+  const prev=visitas[chave]||{};
+  document.getElementById('resResultado').value=prev.resultado||'pedido';
+  document.getElementById('resValor').value=prev.valor||'';
+  document.getElementById('resObs').value=prev.obs||'';
+  document.getElementById('ovResultado').classList.remove('hidden');
+}
+function fecharRes(){document.getElementById('ovResultado').classList.add('hidden');slotResultado=null;}
+function salvarRes(){
+  if(!slotResultado)return;
+  const{data,idx}=slotResultado,s=(roteiro[data]||[])[idx];
+  if(!s)return;
+  const chave=data+'_'+(s.clienteId||s.tipo);
+  visitas[chave]={resultado:document.getElementById('resResultado').value,valor:parseFloat(document.getElementById('resValor').value)||0,obs:document.getElementById('resObs').value,em:new Date().toISOString()};
+  if(s.clienteId){if(!memoria[s.clienteId])memoria[s.clienteId]={};memoria[s.clienteId].ultimoResultado=visitas[chave].resultado;memoria[s.clienteId].ultimaVisita=data;}
+  salvar();fecharRes();renderTudo();
+}
+
+// ── SENHA ───────────────────────────────────────────────────
+function pedirSenha(){document.getElementById('senhaInput').value='';document.getElementById('senhaErr').style.display='none';document.getElementById('senhaOv').classList.add('show');setTimeout(()=>document.getElementById('senhaInput').focus(),100);}
+async function confirmarRoteiro(){
+  const h=await sha256(document.getElementById('senhaInput').value);
+  if(h!==hashSenha){document.getElementById('senhaErr').style.display='block';return;}
+  document.getElementById('senhaOv').classList.remove('show');
+  document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>Gerando roteiro...</p></div>';
+  setTimeout(()=>gerarRoteiro(),80);
+}
+document.getElementById('senhaInput').addEventListener('keydown',e=>{if(e.key==='Enter')confirmarRoteiro();});
+
+// ── TABS ────────────────────────────────────────────────────
+function setView(v){
+  viewAtual=v;
+  ['dia','semana','mes','resumo'].forEach(x=>{
+    document.getElementById('view'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('hidden',x!==v);
+    document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('ativo',x===v);
+  });
+  renderViewAtual();
+}
+
+function mudarMes(d){mesSel.setMonth(mesSel.getMonth()+d);mesSel.setDate(1);carregarEstado();renderTudo();}
+
 init();
 </script>
 </body>
