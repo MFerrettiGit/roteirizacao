@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roteirização — M. Ferretti</title>
+<style>
+  :root {
+    --azul: #2B2FA8;
+    --azul-dark: #1e2275;
+    --azul-light: #4a4fc4;
+    --bg: #f0f2ff;
+    --card: #ffffff;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --border: #e2e8f0;
+    --shadow: 0 4px 24px rgba(43,47,168,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  header {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: linear-gradient(135deg, var(--azul-dark), var(--azul));
+    padding: 14px 32px;
+    display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    z-index: 100;
+  }
+  header img { height: 36px; }
+  header h1 { color: #fff; font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+  .main {
+    margin-top: 80px;
+    width: 100%;
+    max-width: 900px;
+    padding: 40px 24px;
+  }
+  .hero {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .hero h2 { font-size: 1.6rem; color: var(--azul); margin-bottom: 8px; }
+  .hero p { color: var(--muted); font-size: 1rem; }
+
+  /* Login box */
+  .login-card {
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 36px 40px;
+    max-width: 440px;
+    margin: 0 auto 32px;
+  }
+  .login-card h3 { color: var(--azul); margin-bottom: 20px; font-size: 1.1rem; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--azul); }
+  .btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--azul);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+    margin-top: 8px;
+  }
+  .btn:hover { background: var(--azul-dark); }
+  .btn:disabled { background: var(--muted); cursor: not-allowed; }
+  .error { color: #dc2626; font-size: 0.85rem; margin-top: 8px; display: none; }
+
+  /* Cards de setores (gestor) */
+  .setores-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .setor-card {
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 20px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color .2s, transform .15s;
+    text-align: center;
+  }
+  .setor-card:hover { border-color: var(--azul); transform: translateY(-2px); }
+  .setor-card .icon { font-size: 2rem; margin-bottom: 8px; }
+  .setor-card .nome { font-weight: 600; color: var(--text); font-size: 0.95rem; }
+  .setor-card .info { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+  .loading { text-align: center; color: var(--muted); padding: 40px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <img src="assets/ferretti-branco.png" alt="Ferretti">
+  <h1>Roteirização de Vendas</h1>
+</header>
+
+<div class="main">
+  <div class="hero">
+    <h2>Bem-vindo ao Sistema de Roteirização</h2>
+    <p>Entre com sua senha para acessar o roteiro do seu setor.</p>
+  </div>
+
+  <!-- Login vendedor -->
+  <div class="login-card" id="boxLogin">
+    <h3>🔐 Acesso</h3>
+    <div class="field">
+      <label>Setor / Vendedor</label>
+      <select id="selSetor">
+        <option value="">Carregando setores...</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" id="inputSenha" placeholder="Digite sua senha" autocomplete="current-password">
+    </div>
+    <div class="error" id="erroLogin">Senha incorreta. Tente novamente.</div>
+    <button class="btn" id="btnEntrar" onclick="tentarLogin()">Entrar</button>
+    <p style="text-align:center;margin-top:12px;font-size:0.8rem;color:var(--muted)">
+      Acesso de gestor? Use a senha de gestor.
+    </p>
+  </div>
+
+  <!-- Visão gestor (todos os setores) -->
+  <div id="boxGestor" class="hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="color:var(--azul)">👔 Visão do Gestor — Todos os Setores</h3>
+      <button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:0.85rem;color:var(--muted)">Sair</button>
+    </div>
+    <div class="setores-grid" id="gridSetores"></div>
+  </div>
+
+  <p id="statusDados" style="text-align:center;font-size:0.8rem;color:var(--muted);margin-top:16px;"></p>
+</div>
+
+<script src="dados/clientes.js"></script>
+<script>
+// =============================================
+// SENHAS — hash SHA-256 (minúsculas, UTF-8)
+// =============================================
+// Cada setor tem uma senha própria + gestor vê tudo
+// Formato: { setor: hashSHA256 }
+// A senha "ferretti" é a senha de gestor geral (roteirização)
+// Senhas de vendedores: mesma lógica das campanhas
+
+const HASHES_VENDEDOR = {}; // será populado dos dados
+const HASH_GESTOR = '8c7dd922ad47494fc02c388e12c00eac'; // MD5 não usar - usar SHA256 abaixo
+
+// Hash da senha "gestor": SHA256("gestor") - calculado em runtime
+const SENHA_GESTOR_TEXTO = 'gestor'; // gestor vê todos os setores
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(str.toLowerCase()));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// =============================================
+// INIT
+// =============================================
+let VENDEDORES = [];
+let CLIENTES = [];
+let hashGestor = '';
+
+async function init() {
+  hashGestor = await sha256(SENHA_GESTOR_TEXTO);
+
+  if (window.VENDEDORES_DATA && window.VENDEDORES_DATA.length > 0) {
+    VENDEDORES = window.VENDEDORES_DATA;
+    CLIENTES = window.CLIENTES_DATA || [];
+    popularSelectSetor();
+    document.getElementById('statusDados').textContent =
+      'Dados atualizados em: ' + (window.DADOS_ATUALIZADOS_EM || '—');
+  } else {
+    document.getElementById('selSetor').innerHTML =
+      '<option value="">⚠️ Dados não carregados — execute o script de atualização</option>';
+    document.getElementById('statusDados').textContent =
+      'Execute scripts/build-dados.ps1 para carregar os dados.';
+  }
+
+  // Verifica sessão ativa
+  const sessao = sessionStorage.getItem('ferretti_roteiro_sessao');
+  if (sessao) {
+    const s = JSON.parse(sessao);
+    if (s.tipo === 'gestor') {
+      mostrarGestor();
+      return;
+    }
+    if (s.tipo === 'vendedor') {
+      abrirRoteiro(s.setor, s.codVendedor);
+      return;
+    }
+  }
+}
+
+function popularSelectSetor() {
+  const sel = document.getElementById('selSetor');
+  sel.innerHTML = '<option value="">Selecione seu setor...</option>';
+  VENDEDORES.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.cod;
+    opt.textContent = v.setor + (v.nome ? ' — ' + v.nome : '');
+    sel.appendChild(opt);
+  });
+}
+
+async function tentarLogin() {
+  const codVend = document.getElementById('selSetor').value;
+  const senha = document.getElementById('inputSenha').value;
+  const erro = document.getElementById('erroLogin');
+  erro.style.display = 'none';
+
+  if (!senha) return;
+
+  const h = await sha256(senha);
+
+  // Verifica gestor
+  if (h === hashGestor) {
+    sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify({tipo:'gestor'}));
+    mostrarGestor();
+    return;
+  }
+
+  // Verifica vendedor
+  if (!codVend) { erro.textContent = 'Selecione o setor.'; erro.style.display = 'block'; return; }
+  const vend = VENDEDORES.find(v => v.cod === codVend);
+  if (!vend) { erro.textContent = 'Setor não encontrado.'; erro.style.display = 'block'; return; }
+
+  const hEsperado = await sha256(vend.senha);
+  if (h === hEsperado) {
+    sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify({
+      tipo: 'vendedor', setor: vend.setor, codVendedor: vend.cod
+    }));
+    abrirRoteiro(vend.setor, vend.cod);
+  } else {
+    erro.textContent = 'Senha incorreta.'; erro.style.display = 'block';
+  }
+}
+
+function mostrarGestor() {
+  document.getElementById('boxLogin').classList.add('hidden');
+  document.getElementById('boxGestor').classList.remove('hidden');
+  const grid = document.getElementById('gridSetores');
+  grid.innerHTML = '';
+  VENDEDORES.forEach(v => {
+    const clientes = CLIENTES.filter(c => c.cod_vendedor === v.cod);
+    const card = document.createElement('div');
+    card.className = 'setor-card';
+    card.innerHTML = `
+      <div class="icon">🗺️</div>
+      <div class="nome">${v.setor}</div>
+      <div class="info">${v.nome}</div>
+      <div class="info" style="margin-top:4px">${clientes.length} clientes</div>
+    `;
+    card.onclick = () => abrirRoteiro(v.setor, v.cod, true);
+    grid.appendChild(card);
+  });
+}
+
+function abrirRoteiro(setor, codVendedor, gestor = false) {
+  window.location.href = `roteiro.html?setor=${encodeURIComponent(setor)}&cod=${encodeURIComponent(codVendedor)}${gestor?'&gestor=1':''}`;
+}
+
+function logout() {
+  sessionStorage.removeItem('ferretti_roteiro_sessao');
+  location.reload();
+}
+
+document.getElementById('inputSenha').addEventListener('keydown', e => {
+  if (e.key === 'Enter') tentarLogin();
+});
+
+init();
+</script>
+</body>
+</html>

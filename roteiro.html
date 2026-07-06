@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roteiro — M. Ferretti</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --azul:#2B2FA8; --azul-dark:#1e2275; --azul-light:#4a4fc4;
+  --bg:#f0f2ff; --card:#ffffff; --text:#1a1a2e; --muted:#6b7280;
+  --border:#e2e8f0; --shadow:0 4px 24px rgba(43,47,168,0.10);
+  --verde:#16a34a; --laranja:#ea580c; --vermelho:#dc2626; --amarelo:#ca8a04;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);min-height:100vh;}
+header{
+  background:linear-gradient(135deg,var(--azul-dark),var(--azul));
+  padding:10px 20px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 2px 12px rgba(0,0,0,.18);position:sticky;top:0;z-index:1000;
+}
+header img{height:32px;}
+header .titulo{color:#fff;font-size:1rem;font-weight:600;flex:1;}
+header .setor-tag{background:rgba(255,255,255,.18);color:#fff;padding:4px 12px;border-radius:20px;font-size:.82rem;}
+.btn-voltar{background:none;border:1.5px solid rgba(255,255,255,.4);color:#fff;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82rem;}
+.btn-voltar:hover{background:rgba(255,255,255,.1);}
+
+/* Layout principal */
+.layout{display:flex;height:calc(100vh - 56px);}
+.sidebar{width:320px;min-width:320px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.content{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+
+/* Sidebar top */
+.sidebar-top{padding:14px 16px;border-bottom:1px solid var(--border);}
+.mes-nav{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.mes-nav button{background:none;border:1.5px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:1rem;}
+.mes-nav span{flex:1;text-align:center;font-weight:700;color:var(--azul);font-size:1rem;}
+
+/* Mini calendário */
+.mini-cal{width:100%;}
+.mini-cal .dias-semana{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;}
+.mini-cal .dias-semana span{text-align:center;font-size:.7rem;color:var(--muted);font-weight:600;}
+.mini-cal .dias{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.mini-cal .dia{
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;font-size:.78rem;cursor:pointer;position:relative;
+  transition:background .15s;
+}
+.mini-cal .dia:hover{background:var(--bg);}
+.mini-cal .dia.outro-mes{color:var(--muted);opacity:.4;}
+.mini-cal .dia.hoje{background:var(--azul);color:#fff;font-weight:700;}
+.mini-cal .dia.selecionado{background:var(--azul-light);color:#fff;}
+.mini-cal .dia.tem-rota::after{
+  content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
+  width:4px;height:4px;border-radius:50%;background:var(--verde);
+}
+.mini-cal .dia.nao-util{opacity:.35;cursor:default;}
+.mini-cal .dia.passado{opacity:.6;}
+
+/* Sidebar stats */
+.sidebar-stats{padding:12px 16px;border-bottom:1px solid var(--border);}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat{background:var(--bg);border-radius:8px;padding:10px 12px;text-align:center;}
+.stat .val{font-size:1.3rem;font-weight:700;color:var(--azul);}
+.stat .lbl{font-size:.68rem;color:var(--muted);margin-top:2px;}
+.stat.ok .val{color:var(--verde);}
+.stat.warn .val{color:var(--amarelo);}
+
+/* Botões de ação */
+.sidebar-actions{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
+.btn-acao{
+  padding:9px 14px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;
+  display:flex;align-items:center;gap:8px;transition:background .15s;
+}
+.btn-roteirizar{background:var(--azul);color:#fff;}
+.btn-roteirizar:hover{background:var(--azul-dark);}
+.btn-agendar{background:var(--bg);color:var(--azul);border:1.5px solid var(--azul);}
+.btn-agendar:hover{background:var(--azul);color:#fff;}
+
+/* Views tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--card);}
+.tab{flex:1;padding:10px;text-align:center;cursor:pointer;font-size:.88rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;transition:.15s;}
+.tab.ativo{color:var(--azul);border-bottom-color:var(--azul);}
+
+/* View DIA */
+#viewDia{flex:1;display:flex;overflow:hidden;}
+.timeline{width:300px;min-width:300px;overflow-y:auto;padding:16px;border-right:1px solid var(--border);}
+.timeline-header{font-weight:700;color:var(--azul);margin-bottom:12px;font-size:.95rem;}
+.slot{
+  display:flex;gap:10px;margin-bottom:8px;padding:10px 12px;
+  border-radius:10px;background:var(--bg);border-left:4px solid var(--border);
+  transition:transform .1s;cursor:pointer;
+}
+.slot:hover{transform:translateX(3px);}
+.slot.classe-A{border-left-color:#dc2626;}
+.slot.classe-B{border-left-color:#ea580c;}
+.slot.classe-C{border-left-color:#ca8a04;}
+.slot.prospecto{border-left-color:#16a34a;}
+.slot.agendado{border-left-color:var(--azul);}
+.slot.merchandising{border-left-color:#8b5cf6;background:#f5f3ff;}
+.slot.almoco{border-left-color:#94a3b8;background:#f8fafc;}
+.slot.realizado{opacity:.65;}
+.slot-hora{font-size:.75rem;color:var(--muted);min-width:44px;}
+.slot-info .nome{font-weight:600;font-size:.85rem;color:var(--text);}
+.slot-info .detalhe{font-size:.75rem;color:var(--muted);margin-top:2px;}
+.slot-info .tags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
+.tag{font-size:.65rem;padding:2px 7px;border-radius:10px;font-weight:600;}
+.tag-A{background:#fee2e2;color:#991b1b;}
+.tag-B{background:#ffedd5;color:#9a3412;}
+.tag-C{background:#fef9c3;color:#713f12;}
+.tag-ag{background:#dbeafe;color:#1e40af;}
+.tag-real{background:#dcfce7;color:#166534;}
+#mapa{flex:1;}
+
+/* View SEMANA */
+#viewSemana{flex:1;overflow:auto;padding:16px;}
+.semana-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;min-width:700px;}
+.dia-col{background:var(--card);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;}
+.dia-col-header{
+  padding:10px 12px;background:var(--azul);color:#fff;text-align:center;
+  font-size:.82rem;font-weight:600;
+}
+.dia-col-header.hoje-h{background:var(--verde);}
+.dia-col-header.passado-h{background:var(--muted);}
+.dia-col-body{padding:8px;}
+.slot-mini{
+  padding:6px 8px;border-radius:6px;margin-bottom:6px;font-size:.75rem;
+  border-left:3px solid var(--border);background:var(--bg);cursor:pointer;
+}
+.slot-mini .h{color:var(--muted);font-size:.68rem;}
+.slot-mini .n{font-weight:600;color:var(--text);}
+
+/* View MÊS */
+#viewMes{flex:1;overflow:auto;padding:16px;}
+.mes-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;min-width:600px;}
+.mes-header-col{text-align:center;font-size:.75rem;font-weight:700;color:var(--muted);padding:4px;}
+.mes-dia{
+  background:var(--card);border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.06);
+  min-height:90px;padding:6px;cursor:pointer;
+}
+.mes-dia:hover{box-shadow:var(--shadow);}
+.mes-dia .num{font-size:.75rem;font-weight:700;color:var(--muted);}
+.mes-dia.hoje-m .num{background:var(--azul);color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;}
+.mes-dia.outro-m{opacity:.4;}
+.mes-dia.nao-util-m{background:var(--bg);}
+.visita-chip{font-size:.65rem;padding:2px 5px;border-radius:4px;margin-top:2px;background:var(--azul);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.visita-chip.agend{background:var(--verde);}
+
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;display:flex;align-items:center;justify-content:center;}
+.modal{background:var(--card);border-radius:16px;padding:28px;width:90%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,.2);}
+.modal h3{color:var(--azul);margin-bottom:16px;font-size:1.1rem;}
+.mfield{margin-bottom:14px;}
+.mfield label{display:block;font-size:.82rem;font-weight:600;color:var(--text);margin-bottom:5px;}
+.mfield input,.mfield select,.mfield textarea{
+  width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:.9rem;outline:none;font-family:inherit;
+}
+.mfield input:focus,.mfield select:focus,.mfield textarea:focus{border-color:var(--azul);}
+.mfield textarea{resize:vertical;min-height:60px;}
+.modal-btns{display:flex;gap:10px;margin-top:16px;}
+.mbtn{flex:1;padding:10px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:.9rem;}
+.mbtn-ok{background:var(--azul);color:#fff;}
+.mbtn-ok:hover{background:var(--azul-dark);}
+.mbtn-cancel{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}
+
+/* Senha roteirizar */
+.senha-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:none;align-items:center;justify-content:center;}
+.senha-overlay.show{display:flex;}
+.senha-box{background:#fff;border-radius:14px;padding:28px;width:340px;text-align:center;}
+.senha-box h3{color:var(--azul);margin-bottom:8px;}
+.senha-box p{font-size:.85rem;color:var(--muted);margin-bottom:16px;}
+.senha-box input{
+  width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:1rem;text-align:center;outline:none;margin-bottom:10px;
+}
+.senha-box input:focus{border-color:var(--azul);}
+.senha-box .merr{color:#dc2626;font-size:.82rem;margin-bottom:8px;display:none;}
+.senha-box .sbtn{
+  width:100%;padding:11px;background:var(--azul);color:#fff;border:none;
+  border-radius:8px;font-weight:700;cursor:pointer;font-size:.95rem;
+}
+
+/* Loading spinner */
+.spinner{
+  width:40px;height:40px;border:4px solid var(--border);
+  border-top-color:var(--azul);border-radius:50%;
+  animation:spin .8s linear infinite;margin:40px auto;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.msg-centro{text-align:center;padding:40px;color:var(--muted);}
+
+/* Realizado badge */
+.realizado-btn{
+  margin-left:auto;padding:3px 8px;border-radius:6px;font-size:.68rem;font-weight:700;
+  border:none;cursor:pointer;
+}
+.realizado-btn.nao{background:#fef9c3;color:#713f12;}
+.realizado-btn.sim{background:#dcfce7;color:#166534;}
+
+/* Responsivo */
+@media(max-width:768px){
+  .sidebar{width:100%;min-width:0;height:auto;}
+  .layout{flex-direction:column;}
+  #viewDia{flex-direction:column;}
+  .timeline{width:100%;min-width:0;border-right:none;border-bottom:1px solid var(--border);}
+  #mapa{height:300px;}
+}
+</style>
+</head>
+<body>
+<header>
+  <img src="assets/ferretti-branco.png" alt="Ferretti">
+  <span class="titulo">Roteirização de Vendas</span>
+  <span class="setor-tag" id="headerSetor">—</span>
+  <button class="btn-voltar" onclick="location.href='index.html'">← Sair</button>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="mes-nav">
+        <button onclick="mudarMes(-1)">‹</button>
+        <span id="labelMes">—</span>
+        <button onclick="mudarMes(1)">›</button>
+      </div>
+      <div class="mini-cal">
+        <div class="dias-semana">
+          <span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span>
+        </div>
+        <div class="dias" id="miniCal"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-stats">
+      <div style="font-size:.8rem;font-weight:700;color:var(--muted);margin-bottom:8px;">PROGRESSO DO MÊS</div>
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat"><div class="val" id="stVisitas">—</div><div class="lbl">Visitas / 100</div></div>
+        <div class="stat"><div class="val" id="stHoras">—</div><div class="lbl">H. Chão / 100h</div></div>
+        <div class="stat"><div class="val" id="stProsp">—</div><div class="lbl">Prospecções / 2</div></div>
+        <div class="stat"><div class="val" id="stKm">—</div><div class="lbl">Km estimado</div></div>
+      </div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn-acao btn-roteirizar" onclick="pedirSenhaRoteirizar()">
+        ⚙️ Fazer Roteirização
+      </button>
+      <button class="btn-acao btn-agendar" onclick="abrirModalAgendamento()">
+        📅 Novo Agendamento
+      </button>
+    </div>
+
+    <div style="padding:10px 16px;overflow-y:auto;flex:1;">
+      <div style="font-size:.8rem;font-weight:700;color:var(--muted);margin-bottom:8px;">DIA SELECIONADO</div>
+      <div id="resumoDia" class="msg-centro" style="padding:20px;font-size:.85rem;">
+        Clique em um dia no calendário.
+      </div>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="content">
+    <div class="tabs">
+      <div class="tab ativo" onclick="setView('dia')" id="tabDia">📍 Dia + Mapa</div>
+      <div class="tab" onclick="setView('semana')" id="tabSemana">📅 Semana</div>
+      <div class="tab" onclick="setView('mes')" id="tabMes">🗓️ Mês</div>
+    </div>
+
+    <!-- VIEW DIA -->
+    <div id="viewDia" style="flex:1;display:flex;overflow:hidden;">
+      <div class="timeline" id="timeline">
+        <div class="msg-centro">Selecione um dia no calendário para ver o roteiro.</div>
+      </div>
+      <div id="mapa"></div>
+    </div>
+
+    <!-- VIEW SEMANA -->
+    <div id="viewSemana" style="display:none;flex:1;overflow:auto;padding:16px;">
+      <div class="semana-grid" id="semanaGrid"></div>
+    </div>
+
+    <!-- VIEW MÊS -->
+    <div id="viewMes" style="display:none;flex:1;overflow:auto;padding:16px;">
+      <div class="mes-grid" id="mesGrid"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal Agendamento -->
+<div class="overlay" id="overlayAgendamento" style="display:none;" onclick="if(event.target===this)fecharModal()">
+  <div class="modal">
+    <h3>📅 Novo Agendamento</h3>
+    <div class="mfield">
+      <label>Cliente</label>
+      <input type="text" id="agCliente" placeholder="Digite o nome ou código do cliente" oninput="filtrarClientes(this.value)">
+      <div id="listaClientes" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;display:none;"></div>
+    </div>
+    <div class="mfield">
+      <label>Data</label>
+      <input type="date" id="agData">
+    </div>
+    <div class="mfield">
+      <label>Horário</label>
+      <input type="time" id="agHora" value="10:00">
+    </div>
+    <div class="mfield">
+      <label>Duração (minutos)</label>
+      <input type="number" id="agDuracao" value="60" min="15" max="180" step="15">
+    </div>
+    <div class="mfield">
+      <label>Observação</label>
+      <textarea id="agObs" placeholder="Ex: Reunião com gerente, apresentar novidades..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="mbtn mbtn-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="mbtn mbtn-ok" onclick="salvarAgendamento()">Salvar Agendamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Resultado Visita -->
+<div class="overlay" id="overlayVisita" style="display:none;" onclick="if(event.target===this)fecharModalVisita()">
+  <div class="modal">
+    <h3>✅ Registrar Resultado</h3>
+    <div id="visitaClienteNome" style="font-weight:700;color:var(--azul);margin-bottom:16px;"></div>
+    <div class="mfield">
+      <label>Resultado</label>
+      <select id="visitaResultado">
+        <option value="pedido">✅ Pedido realizado</option>
+        <option value="visita">👁️ Visita sem pedido</option>
+        <option value="ausente">❌ Cliente ausente</option>
+        <option value="reagendar">🔄 Precisa reagendar</option>
+      </select>
+    </div>
+    <div class="mfield">
+      <label>Valor do pedido (R$)</label>
+      <input type="number" id="visitaValor" min="0" step="0.01" placeholder="0,00">
+    </div>
+    <div class="mfield">
+      <label>Observações</label>
+      <textarea id="visitaObs" placeholder="Anotações sobre a visita..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="mbtn mbtn-cancel" onclick="fecharModalVisita()">Cancelar</button>
+      <button class="mbtn mbtn-ok" onclick="salvarResultado()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Senha para Roteirizar -->
+<div class="senha-overlay" id="senhaOverlay">
+  <div class="senha-box">
+    <h3>🔐 Confirmar Roteirização</h3>
+    <p>Digite a senha para gerar/refazer o roteiro do mês.</p>
+    <input type="password" id="senhaRoteirizar" placeholder="Senha" autocomplete="off">
+    <div class="merr" id="senhaErr">Senha incorreta.</div>
+    <button class="sbtn" onclick="confirmarRoteirizacao()">Gerar Roteiro</button>
+    <button onclick="document.getElementById('senhaOverlay').classList.remove('show')"
+      style="margin-top:10px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;">
+      Cancelar
+    </button>
+  </div>
+</div>
+
+<script src="dados/clientes.js"></script>
+<script>
+// =============================================
+// CONSTANTES E CONFIG
+// =============================================
+const CONFIG = {
+  horaInicio: 8*60,        // 08:00 em minutos
+  horaFim: 17*60 + 48,     // 17:48 em minutos
+  almoco: { ini: 11*60+30, fim: 13*60+30 }, // janela de almoço
+  almocoMin: 60,           // duração do almoço
+  minVisitas: 100,
+  minHorasChao: 100,
+  metaProspeccoes: 2,
+  velocidadeKmH: 35,       // velocidade média urbana
+  tempoParking: 10,        // minutos fixos por visita (parking + check-in)
+  tempoPros: 45,           // duração da prospecção (min)
+  tempoMerchan: 15,        // tempo de merchandising por dia (min)
+  // Mapa de tempo por classificação (minutos de chão de loja)
+  tempoClasse: { 'A': 90, 'B': 60, 'C': 45, '': 30 },
+};
+
+// Feriados nacionais 2026 (YYYY-MM-DD)
+const FERIADOS = new Set([
+  '2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21',
+  '2026-05-01','2026-06-04','2026-09-07','2026-10-12','2026-11-02',
+  '2026-11-15','2026-11-20','2026-12-25'
+]);
+
+// SHA256 da senha de roteirização: "ferretti"
+const HASH_ROTEIRIZACAO_ESPERADO = ''; // calculado abaixo
+let hashRoteirizacaoCalculado = '';
+
+// Estado global
+let codVendedor = '';
+let nomeSetor = '';
+let clientes = [];
+let mesSelecionado = new Date();
+mesSelecionado.setDate(1);
+let diaSelecionado = new Date();
+let roteiro = {}; // { 'YYYY-MM-DD': [slot, ...] }
+let agendamentos = []; // [{data, hora, clienteId, duracao, obs}]
+let visitas = {}; // { 'YYYY-MM-DD_clienteId': {resultado, valor, obs} }
+let memoria = {}; // preferências de longo prazo
+let map = null;
+let clienteSelecionadoAgendamento = null;
+let slotParaResultado = null;
+let viewAtual = 'dia';
+
+// =============================================
+// INIT
+// =============================================
+async function init() {
+  const params = new URLSearchParams(location.search);
+  codVendedor = params.get('cod') || '';
+  nomeSetor = params.get('setor') || '';
+
+  document.getElementById('headerSetor').textContent = nomeSetor || codVendedor;
+  document.title = 'Roteiro — ' + nomeSetor;
+
+  // Carrega dados do vendedor
+  if (window.CLIENTES_DATA && window.CLIENTES_DATA.length > 0) {
+    clientes = window.CLIENTES_DATA.filter(c => c.cod_vendedor === codVendedor);
+  }
+
+  // Carrega estado do localStorage
+  carregarEstado();
+
+  // Inicializa mapa Leaflet
+  map = L.map('mapa', { zoomControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Centraliza no centróide dos clientes
+  if (clientes.length > 0) {
+    const lats = clientes.map(c => parseFloat(c.latitude)).filter(v => !isNaN(v));
+    const lons = clientes.map(c => parseFloat(c.longitude)).filter(v => !isNaN(v));
+    if (lats.length > 0) {
+      const cLat = lats.reduce((a,b) => a+b, 0) / lats.length;
+      const cLon = lons.reduce((a,b) => a+b, 0) / lons.length;
+      map.setView([cLat, cLon], 11);
+    }
+  } else {
+    map.setView([-23.5, -46.6], 10); // SP default
+  }
+
+  // Hash da senha
+  hashRoteirizacaoCalculado = await sha256('ferretti');
+
+  renderMiniCal();
+  renderStats();
+  selecionarDia(new Date());
+}
+
+// =============================================
+// PERSISTÊNCIA
+// =============================================
+function chave(tipo) {
+  const ym = mesSelecionado.toISOString().slice(0,7).replace('-','');
+  return `ferretti_roteiro_${tipo}_${codVendedor}_${ym}`;
+}
+function chaveGlobal(tipo) { return `ferretti_roteiro_${tipo}_${codVendedor}`; }
+
+function salvarEstado() {
+  const ym = mesSelecionado.toISOString().slice(0,7).replace('-','');
+  localStorage.setItem(chave('roteiro'), JSON.stringify(roteiro));
+  localStorage.setItem(chave('agendamentos'), JSON.stringify(agendamentos));
+  localStorage.setItem(chave('visitas'), JSON.stringify(visitas));
+  localStorage.setItem(chaveGlobal('memoria'), JSON.stringify(memoria));
+}
+
+function carregarEstado() {
+  const r = localStorage.getItem(chave('roteiro'));
+  const ag = localStorage.getItem(chave('agendamentos'));
+  const v = localStorage.getItem(chave('visitas'));
+  const m = localStorage.getItem(chaveGlobal('memoria'));
+  roteiro = r ? JSON.parse(r) : {};
+  agendamentos = ag ? JSON.parse(ag) : [];
+  visitas = v ? JSON.parse(v) : {};
+  memoria = m ? JSON.parse(m) : {};
+}
+
+// =============================================
+// UTILITÁRIOS
+// =============================================
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str.toLowerCase()));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function isUtil(date) {
+  const d = date instanceof Date ? date : new Date(date + 'T12:00:00');
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) return false;
+  const ds = d.toISOString().slice(0,10);
+  return !FERIADOS.has(ds);
+}
+
+function dateStr(date) {
+  return date.toISOString().slice(0,10);
+}
+
+function diasUteisDoMes(ano, mes) {
+  const dias = [];
+  const d = new Date(ano, mes, 1);
+  while (d.getMonth() === mes) {
+    if (isUtil(d)) dias.push(dateStr(new Date(d)));
+    d.setDate(d.getDate() + 1);
+  }
+  return dias;
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function travelMin(c1, c2) {
+  if (!c1 || !c2) return 0;
+  const dist = haversineKm(
+    parseFloat(c1.latitude||c1.lat), parseFloat(c1.longitude||c1.lon),
+    parseFloat(c2.latitude||c2.lat), parseFloat(c2.longitude||c2.lon)
+  );
+  return Math.round((dist / CONFIG.velocidadeKmH) * 60) + CONFIG.tempoParking;
+}
+
+function clienteTempoVisita(c) {
+  let t = CONFIG.tempoClasse[c.classificacao] || CONFIG.tempoClasse[''];
+  if ((c.mix_produtos || 0) > 15) t += 15;
+  return Math.min(t, 120);
+}
+
+function minToHora(min) {
+  const h = Math.floor(min/60);
+  const m = min % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+function horaToMin(str) {
+  const [h,m] = str.split(':').map(Number);
+  return h*60 + (m||0);
+}
+
+// Pontuação de prioridade do cliente (maior = mais urgente visitar)
+function scorePrioridade(c, diaSelecionado) {
+  let score = 0;
+  // Classificação
+  const classScore = {A:40, B:25, C:15, '':8};
+  score += classScore[c.classificacao] || 8;
+  // Faturamento
+  const fat = c.fat_12m || 0;
+  if (fat > 50000) score += 20;
+  else if (fat > 20000) score += 12;
+  else if (fat > 5000) score += 6;
+  // Dias sem visita
+  if (c.ult_visita) {
+    const dias = Math.round((new Date() - new Date(c.ult_visita)) / 86400000);
+    score += Math.min(dias * 0.5, 25);
+  } else {
+    score += 30; // nunca visitado = alta prioridade
+  }
+  // Mix
+  if ((c.mix_produtos||0) > 10) score += 5;
+  // Memória do setor
+  const pref = memoria[c.cod_cliente + '_' + c.loja];
+  if (pref && pref.prioridade === 'alta') score += 15;
+  if (pref && pref.prioridade === 'baixa') score -= 10;
+  return score;
+}
+
+// =============================================
+// ALGORITMO DE ROTEIRIZAÇÃO
+// =============================================
+function gerarRoteiro() {
+  const ano = mesSelecionado.getFullYear();
+  const mes = mesSelecionado.getMonth();
+  const diasUteis = diasUteisDoMes(ano, mes);
+
+  if (diasUteis.length === 0 || clientes.length === 0) return;
+
+  // Copia roteiro atual (preserva dias já passados com resultado)
+  const hoje = dateStr(new Date());
+  const novoRoteiro = {};
+
+  // Mantém dias passados já realizados
+  diasUteis.forEach(d => {
+    if (d < hoje && roteiro[d] && roteiro[d].some(s => visitas[d+'_'+(s.clienteId||'')])) {
+      novoRoteiro[d] = roteiro[d];
+    }
+  });
+
+  // Dias restantes (hoje em diante)
+  const diasFuturos = diasUteis.filter(d => d >= hoje);
+
+  // Clientes já visitados no mês
+  const visitadosNoMes = new Set();
+  Object.keys(visitas).forEach(k => {
+    const [, cid] = k.split('_');
+    if (k.startsWith(ano+'-'+(String(mes+1).padStart(2,'0')))) visitadosNoMes.add(cid);
+  });
+
+  // Agendamentos fixos do mês (apenas futuros)
+  const agFuturos = agendamentos.filter(ag => ag.data >= hoje);
+
+  // Ordena clientes por prioridade
+  const clientesOrdenados = [...clientes]
+    .filter(c => parseFloat(c.latitude) && parseFloat(c.longitude))
+    .sort((a, b) => scorePrioridade(b, hoje) - scorePrioridade(a, hoje));
+
+  let pool = [...clientesOrdenados];
+  let visitasTotal = 0;
+  let horasChao = 0;
+  let prospTotal = 0;
+  let kmTotal = 0;
+
+  // Conta progresso já realizado
+  Object.values(visitas).forEach(v => { visitasTotal++; horasChao += 0.75; });
+
+  // Distribuição: dividir pool pelos dias futuros
+  // Quantos clientes por dia para atingir 100 visitas?
+  const visitasNecessarias = Math.max(0, CONFIG.minVisitas - visitasTotal);
+  const visitasPorDia = Math.ceil(visitasNecessarias / Math.max(diasFuturos.length, 1));
+
+  // Centróide do dia anterior (começa no centro do território)
+  const centroide = calcularCentroide(clientesOrdenados);
+  let ultimoLocal = centroide;
+
+  diasFuturos.forEach((data, idx) => {
+    const slots = [];
+    let cursor = CONFIG.horaInicio; // minutos desde meia-noite
+    let almocoFeito = false;
+
+    // Adiciona agendamentos fixos do dia (ordenados por hora)
+    const agsHoje = agFuturos
+      .filter(ag => ag.data === data)
+      .sort((a,b) => horaToMin(a.hora) - horaToMin(b.hora));
+
+    // Reserva slots de agendamento
+    agsHoje.forEach(ag => {
+      const cId = ag.clienteId;
+      const c = clientes.find(x => (x.cod_cliente+'_'+x.loja) === cId) || {nome_cliente: ag.nomeCliente};
+      slots.push({
+        tipo: 'agendamento',
+        horaIni: ag.hora,
+        horaFim: minToHora(horaToMin(ag.hora) + parseInt(ag.duracao||60)),
+        clienteId: cId,
+        nome: ag.nomeCliente || (c && c.nome_cliente) || '—',
+        duracao: parseInt(ag.duracao||60),
+        obs: ag.obs || '',
+        classificacao: c ? c.classificacao : '',
+      });
+    });
+
+    // Preenche com clientes do pool (nearest-neighbor)
+    let localAtual = ultimoLocal;
+    let clientesHoje = [];
+
+    // Calcula quantos clientes cabem no dia
+    let tempoDisponivel = CONFIG.horaFim - CONFIG.horaInicio - CONFIG.almocoMin - CONFIG.tempoMerchan;
+    if (agsHoje.length > 0) {
+      const tempoAgs = agsHoje.reduce((s,ag) => s + parseInt(ag.duracao||60), 0);
+      tempoDisponivel -= tempoAgs;
+    }
+
+    const maxVisitasDia = Math.min(visitasPorDia + 1, Math.floor(tempoDisponivel / 40));
+
+    // Seleciona os clientes mais próximos e prioritários
+    let poolLocal = pool.filter(c => !visitadosNoMes.has(c.cod_cliente+'_'+c.loja));
+
+    for (let i = 0; i < maxVisitasDia && poolLocal.length > 0 && tempoDisponivel > 0; i++) {
+      // Nearest neighbor ponderado (distância + prioridade)
+      let melhor = null, melhorScore = -Infinity;
+      poolLocal.slice(0, 30).forEach(c => { // limita busca a top 30
+        const dist = haversineKm(
+          parseFloat(localAtual.latitude||localAtual.lat||0), parseFloat(localAtual.longitude||localAtual.lon||0),
+          parseFloat(c.latitude), parseFloat(c.longitude)
+        );
+        const travel = (dist / CONFIG.velocidadeKmH) * 60;
+        const dur = clienteTempoVisita(c);
+        if (travel + dur > tempoDisponivel) return;
+        const prioScore = scorePrioridade(c) / 100;
+        const distScore = -dist / 10;
+        const total = prioScore + distScore;
+        if (total > melhorScore) { melhorScore = total; melhor = c; }
+      });
+
+      if (!melhor) break;
+
+      const travel = travelMin(localAtual, melhor);
+      const dur = clienteTempoVisita(melhor);
+      tempoDisponivel -= (travel + dur);
+      kmTotal += haversineKm(
+        parseFloat(localAtual.latitude||localAtual.lat||0), parseFloat(localAtual.longitude||localAtual.lon||0),
+        parseFloat(melhor.latitude), parseFloat(melhor.longitude)
+      );
+
+      clientesHoje.push(melhor);
+      visitadosNoMes.add(melhor.cod_cliente+'_'+melhor.loja);
+      poolLocal = poolLocal.filter(c => c !== melhor);
+      pool = pool.filter(c => c !== melhor);
+      localAtual = melhor;
+    }
+
+    // Adiciona prospecção (2 por mês, nos primeiros 2 dias úteis com slot)
+    if (prospTotal < CONFIG.metaProspeccoes && idx < 5) {
+      slots.push({
+        tipo: 'prospeccao',
+        nome: 'Prospecção de novo cliente',
+        duracao: CONFIG.tempoPros,
+        classificacao: 'P',
+      });
+      prospTotal++;
+    }
+
+    // Monta timeline do dia com almoço e clientes
+    let cur = CONFIG.horaInicio;
+    const slotsFinais = [];
+
+    // Merchandising no início do dia
+    slotsFinais.push({tipo:'merchandising', nome:'Merchandising', horaIni:minToHora(cur), horaFim:minToHora(cur+CONFIG.tempoMerchan), duracao:CONFIG.tempoMerchan});
+    cur += CONFIG.tempoMerchan;
+
+    // Intercala agendamentos fixos e clientes do pool
+    const todosSlotsData = [
+      ...agsHoje.map(ag => ({...ag, tipo:'agendamento', nome: ag.nomeCliente})),
+      ...clientesHoje.map(c => ({tipo:'visita', cliente:c, nome:c.nome_cliente, classificacao:c.classificacao, clienteId:c.cod_cliente+'_'+c.loja}))
+    ];
+
+    // Ordena agendamentos por hora; visitas preenchem gaps
+    const agsOrdenados = agsHoje.sort((a,b) => horaToMin(a.hora) - horaToMin(b.hora));
+    const visitasPool = clientesHoje;
+    let vi = 0;
+
+    function inserirAlmoco(cursor) {
+      if (!almocoFeito && cursor >= CONFIG.almoco.ini && cursor <= CONFIG.almoco.fim) {
+        const fim = cursor + CONFIG.almocoMin;
+        slotsFinais.push({tipo:'almoco', nome:'Almoço', horaIni:minToHora(cursor), horaFim:minToHora(fim), duracao:CONFIG.almocoMin});
+        almocoFeito = true;
+        return fim;
+      }
+      return cursor;
+    }
+
+    for (let ag of agsOrdenados) {
+      const agMin = horaToMin(ag.hora);
+      // Preenche com visitas antes do agendamento
+      while (vi < visitasPool.length && cur + travelMin({lat:0,lon:0}, visitasPool[vi]) + clienteTempoVisita(visitasPool[vi]) < agMin) {
+        cur = inserirAlmoco(cur);
+        const c = visitasPool[vi];
+        const dur = clienteTempoVisita(c);
+        slotsFinais.push({
+          tipo:'visita', clienteId:c.cod_cliente+'_'+c.loja, nome:c.nome_cliente,
+          horaIni:minToHora(cur), horaFim:minToHora(cur+dur), duracao:dur,
+          classificacao:c.classificacao, lat:parseFloat(c.latitude), lon:parseFloat(c.longitude),
+          fat12m:c.fat_12m, municipio:c.municipio
+        });
+        cur += dur;
+        vi++;
+      }
+      cur = inserirAlmoco(cur);
+      if (agMin > cur) cur = agMin;
+      const dur = parseInt(ag.duracao||60);
+      slotsFinais.push({
+        tipo:'agendamento', clienteId:ag.clienteId, nome:ag.nomeCliente,
+        horaIni:ag.hora, horaFim:minToHora(horaToMin(ag.hora)+dur), duracao:dur,
+        obs:ag.obs, classificacao:'',
+      });
+      cur = horaToMin(ag.hora) + dur;
+    }
+
+    // Adiciona visitas restantes
+    while (vi < visitasPool.length && cur < CONFIG.horaFim) {
+      cur = inserirAlmoco(cur);
+      const c = visitasPool[vi];
+      const dur = clienteTempoVisita(c);
+      if (cur + dur > CONFIG.horaFim) break;
+      slotsFinais.push({
+        tipo:'visita', clienteId:c.cod_cliente+'_'+c.loja, nome:c.nome_cliente,
+        horaIni:minToHora(cur), horaFim:minToHora(cur+dur), duracao:dur,
+        classificacao:c.classificacao, lat:parseFloat(c.latitude), lon:parseFloat(c.longitude),
+        fat12m:c.fat_12m, municipio:c.municipio
+      });
+      cur += dur;
+      vi++;
+    }
+
+    // Almoço no final se não foi feito
+    if (!almocoFeito) {
+      const idx = slotsFinais.findIndex(s => s.tipo==='visita');
+      const almMin = Math.min(CONFIG.almoco.fim, Math.max(CONFIG.almoco.ini, cur));
+      slotsFinais.splice(idx+1, 0, {tipo:'almoco', nome:'Almoço', horaIni:minToHora(almMin), horaFim:minToHora(almMin+CONFIG.almocoMin), duracao:CONFIG.almocoMin});
+    }
+
+    // Prospecção
+    const prospSlots = slots.filter(s => s.tipo==='prospeccao');
+    slotsFinais.push(...prospSlots.map(s => ({...s, horaIni:minToHora(CONFIG.horaFim-CONFIG.tempoPros), horaFim:minToHora(CONFIG.horaFim)})));
+
+    novoRoteiro[data] = slotsFinais;
+
+    // Atualiza último local para próximo dia
+    const ultimaVisita = [...slotsFinais].reverse().find(s => s.lat);
+    if (ultimaVisita) ultimoLocal = {latitude:ultimaVisita.lat, longitude:ultimaVisita.lon};
+  });
+
+  roteiro = novoRoteiro;
+  salvarEstado();
+  renderTudo();
+}
+
+function calcularCentroide(lista) {
+  if (!lista.length) return {latitude:-23.5, longitude:-46.6};
+  const lats = lista.map(c=>parseFloat(c.latitude)).filter(v=>!isNaN(v));
+  const lons = lista.map(c=>parseFloat(c.longitude)).filter(v=>!isNaN(v));
+  return {
+    latitude: lats.reduce((a,b)=>a+b,0)/lats.length,
+    longitude: lons.reduce((a,b)=>a+b,0)/lons.length
+  };
+}
+
+// =============================================
+// RENDER
+// =============================================
+function renderTudo() {
+  renderMiniCal();
+  renderStats();
+  renderViewAtual();
+}
+
+function renderViewAtual() {
+  if (viewAtual==='dia') renderDia(diaSelecionado);
+  else if (viewAtual==='semana') renderSemana();
+  else renderMes();
+}
+
+function renderMiniCal() {
+  const ano = mesSelecionado.getFullYear();
+  const mes = mesSelecionado.getMonth();
+  document.getElementById('labelMes').textContent =
+    mesSelecionado.toLocaleDateString('pt-BR', {month:'long', year:'numeric'}).replace(/^\w/, c=>c.toUpperCase());
+
+  const primeiro = new Date(ano, mes, 1);
+  const ultimo = new Date(ano, mes+1, 0);
+  const hoje = dateStr(new Date());
+  const selStr = dateStr(diaSelecionado);
+
+  let html = '';
+  // Dias do mês anterior para completar semana
+  for (let i = 0; i < primeiro.getDay(); i++) {
+    const d = new Date(ano, mes, 1 - (primeiro.getDay() - i));
+    html += `<div class="dia outro-mes">${d.getDate()}</div>`;
+  }
+  for (let d = 1; d <= ultimo.getDate(); d++) {
+    const date = new Date(ano, mes, d);
+    const ds = dateStr(date);
+    const util = isUtil(date);
+    const temRota = roteiro[ds] && roteiro[ds].length > 0;
+    let cls = 'dia';
+    if (!util) cls += ' nao-util';
+    if (ds === hoje) cls += ' hoje';
+    if (ds === selStr) cls += ' selecionado';
+    if (temRota) cls += ' tem-rota';
+    if (ds < hoje) cls += ' passado';
+    html += `<div class="${cls}" onclick="${util?`selecionarDia(new Date('${ds}T12:00:00'))`:''}">${d}</div>`;
+  }
+  document.getElementById('miniCal').innerHTML = html;
+}
+
+function renderStats() {
+  const ano = mesSelecionado.getFullYear();
+  const mes = mesSelecionado.getMonth();
+  const ym = `${ano}-${String(mes+1).padStart(2,'0')}`;
+
+  let visitasRealizadas = 0, horasChao = 0, prospRealizadas = 0, kmEst = 0;
+
+  // Conta do roteiro planejado
+  Object.entries(roteiro).forEach(([data, slots]) => {
+    if (!data.startsWith(ym)) return;
+    slots.forEach(s => {
+      if (s.tipo === 'visita') {
+        const chv = data+'_'+(s.clienteId||'');
+        if (visitas[chv]) { visitasRealizadas++; horasChao += s.duracao/60; }
+        kmEst += 10; // placeholder
+      }
+      if (s.tipo === 'prospeccao' && visitas[data+'_prospeccao']) prospRealizadas++;
+    });
+  });
+
+  const setarStat = (id, val, meta, classOk='ok') => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = val;
+    const paren = el.closest('.stat');
+    if (paren) paren.className = 'stat ' + (val >= meta ? classOk : (val >= meta*0.5 ? 'warn' : ''));
+  };
+
+  setarStat('stVisitas', visitasRealizadas, CONFIG.minVisitas);
+  setarStat('stHoras', horasChao.toFixed(1)+'h', CONFIG.minHorasChao);
+  setarStat('stProsp', prospRealizadas, CONFIG.metaProspeccoes);
+  document.getElementById('stKm').textContent = '~'+Math.round(kmEst)+'km';
+}
+
+// =============================================
+// VIEW DIA
+// =============================================
+function selecionarDia(date) {
+  diaSelecionado = date instanceof Date ? date : new Date(date+'T12:00:00');
+  renderMiniCal();
+  if (viewAtual==='dia') renderDia(diaSelecionado);
+  renderResumoDia();
+}
+
+function renderDia(date) {
+  const ds = dateStr(date);
+  const slots = roteiro[ds] || [];
+  const tl = document.getElementById('timeline');
+
+  const nomeData = date.toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
+  let html = `<div class="timeline-header">${nomeData.charAt(0).toUpperCase()+nomeData.slice(1)}</div>`;
+
+  if (!isUtil(date)) {
+    html += `<div class="msg-centro" style="padding:30px;">Não é dia útil.</div>`;
+    tl.innerHTML = html;
+    atualizarMapa([]);
+    return;
+  }
+
+  if (slots.length === 0) {
+    html += `<div class="msg-centro" style="padding:20px;">Nenhuma roteirização para este dia.<br><br>
+      <small style="color:var(--muted)">Clique em "Fazer Roteirização" para gerar o roteiro do mês.</small></div>`;
+    tl.innerHTML = html;
+    atualizarMapa([]);
+    return;
+  }
+
+  const hoje = dateStr(new Date()) === ds;
+  slots.forEach((s, i) => {
+    const chv = ds+'_'+(s.clienteId||'');
+    const realizado = !!visitas[chv];
+    let cls = `slot ${s.tipo==='agendamento'?'agendado':s.tipo==='prospeccao'?'prospecto':s.tipo==='almoco'?'almoco':s.tipo==='merchandising'?'merchandising':''}`;
+    if (s.classificacao) cls += ` classe-${s.classificacao}`;
+    if (realizado) cls += ' realizado';
+
+    let tags = '';
+    if (s.classificacao && s.tipo==='visita') tags += `<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
+    if (s.tipo==='agendamento') tags += `<span class="tag tag-ag">Agendado</span>`;
+    if (realizado) tags += `<span class="tag tag-real">✓ Realizado</span>`;
+
+    let btnReal = '';
+    if ((s.tipo==='visita'||s.tipo==='agendamento') && (hoje || ds < dateStr(new Date()))) {
+      btnReal = `<button class="realizado-btn ${realizado?'sim':'nao'}"
+        onclick="event.stopPropagation();abrirModalVisita('${ds}',${i})">${realizado?'✓ OK':'Registrar'}</button>`;
+    }
+
+    const detalhe = s.municipio ? s.municipio : (s.obs ? s.obs : (s.fat12m ? `R$ ${(s.fat12m/1000).toFixed(1)}k/ano` : ''));
+
+    html += `<div class="${cls}" onclick="clicarSlot('${ds}',${i})">
+      <div class="slot-hora">${s.horaIni||''}<br><small>${s.duracao||''}min</small></div>
+      <div class="slot-info" style="flex:1">
+        <div class="nome">${s.nome||'—'}</div>
+        ${detalhe?`<div class="detalhe">${detalhe}</div>`:''}
+        <div class="tags">${tags}</div>
+      </div>
+      ${btnReal}
+    </div>`;
+  });
+
+  tl.innerHTML = html;
+  atualizarMapa(slots);
+}
+
+function renderResumoDia() {
+  const ds = dateStr(diaSelecionado);
+  const slots = roteiro[ds] || [];
+  const div = document.getElementById('resumoDia');
+  if (slots.length === 0) { div.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sem roteiro para este dia.</div>'; return; }
+  const visitas_dia = slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').length;
+  const hChao = slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').reduce((a,s)=>a+(s.duracao||0),0)/60;
+  div.innerHTML = `<div style="font-size:.85rem">
+    <b>${visitas_dia}</b> visitas · <b>${hChao.toFixed(1)}h</b> chão de loja
+  </div>`;
+}
+
+// =============================================
+// MAPA LEAFLET
+// =============================================
+let mapaLayers = [];
+
+function atualizarMapa(slots) {
+  mapaLayers.forEach(l => map.removeLayer(l));
+  mapaLayers = [];
+
+  const pontos = slots.filter(s => s.lat && s.lon);
+  if (pontos.length === 0) return;
+
+  const cores = {A:'#dc2626', B:'#ea580c', C:'#ca8a04', '':'#6b7280', P:'#16a34a'};
+  const latlngs = [];
+
+  pontos.forEach((s, i) => {
+    const cor = cores[s.classificacao] || '#2B2FA8';
+    const icon = L.divIcon({
+      html: `<div style="background:${cor};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)">${i+1}</div>`,
+      className: '', iconSize: [28,28], iconAnchor: [14,14]
+    });
+    const marker = L.marker([s.lat, s.lon], {icon})
+      .bindPopup(`<b>${s.nome}</b><br>${s.horaIni} – ${s.horaFim}<br>${s.duracao} min`)
+      .addTo(map);
+    mapaLayers.push(marker);
+    latlngs.push([s.lat, s.lon]);
+  });
+
+  if (latlngs.length > 1) {
+    const linha = L.polyline(latlngs, {color:'#2B2FA8', weight:2.5, opacity:.6, dashArray:'6,4'}).addTo(map);
+    mapaLayers.push(linha);
+  }
+
+  if (latlngs.length > 0) map.fitBounds(latlngs, {padding:[30,30]});
+}
+
+// =============================================
+// VIEW SEMANA
+// =============================================
+function renderSemana() {
+  const inicio = getSemanaInicio(diaSelecionado);
+  const grid = document.getElementById('semanaGrid');
+  let html = '';
+  const hoje = dateStr(new Date());
+
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(inicio);
+    d.setDate(d.getDate() + i);
+    const ds = dateStr(d);
+    const slots = roteiro[ds] || [];
+    const dNome = d.toLocaleDateString('pt-BR', {weekday:'short', day:'numeric'});
+    const cls = ds === hoje ? 'hoje-h' : ds < hoje ? 'passado-h' : '';
+
+    html += `<div class="dia-col">
+      <div class="dia-col-header ${cls}">${dNome}</div>
+      <div class="dia-col-body">`;
+
+    if (!isUtil(d)) { html += `<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">—</div>`; }
+    else if (slots.length === 0) { html += `<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">Sem roteiro</div>`; }
+    else {
+      slots.filter(s=>s.tipo!=='almoco').forEach(s => {
+        const cor = {A:'#fef2f2',B:'#fff7ed',C:'#fefce8','':'#f8fafc',agendamento:'#eff6ff',merchandising:'#f5f3ff',prospeccao:'#f0fdf4'}[s.tipo==='visita'?s.classificacao:s.tipo] || '#f8fafc';
+        const borda = {A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#94a3b8',agendamento:'#2B2FA8',merchandising:'#8b5cf6',prospeccao:'#16a34a'}[s.tipo==='visita'?s.classificacao:s.tipo] || '#94a3b8';
+        html += `<div class="slot-mini" style="background:${cor};border-left-color:${borda}" onclick="selecionarDia(new Date('${ds}T12:00:00'));setView('dia')">
+          <div class="h">${s.horaIni||''}</div>
+          <div class="n">${s.nome||''}</div>
+        </div>`;
+      });
+    }
+    html += `</div></div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function getSemanaInicio(date) {
+  const d = new Date(date);
+  const dow = d.getDay();
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1)); // segunda
+  return d;
+}
+
+// =============================================
+// VIEW MÊS
+// =============================================
+function renderMes() {
+  const ano = mesSelecionado.getFullYear();
+  const mes = mesSelecionado.getMonth();
+  const grid = document.getElementById('mesGrid');
+  const hoje = dateStr(new Date());
+  const selStr = dateStr(diaSelecionado);
+
+  const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  let html = dias.map(d=>`<div class="mes-header-col">${d}</div>`).join('');
+
+  const primeiro = new Date(ano, mes, 1);
+  const ultimo = new Date(ano, mes+1, 0);
+
+  // Dias do mês anterior
+  for (let i = 0; i < primeiro.getDay(); i++) {
+    html += `<div class="mes-dia outro-m nao-util-m"></div>`;
+  }
+
+  for (let d = 1; d <= ultimo.getDate(); d++) {
+    const date = new Date(ano, mes, d);
+    const ds = dateStr(date);
+    const util = isUtil(date);
+    const slots = (roteiro[ds]||[]).filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
+    let cls = 'mes-dia';
+    if (!util) cls += ' nao-util-m';
+    if (ds === hoje) cls += ' hoje-m';
+    if (ds === selStr) cls += ' selecionado';
+
+    let chips = '';
+    slots.slice(0,3).forEach(s => {
+      const ag = s.tipo==='agendamento';
+      chips += `<div class="visita-chip ${ag?'agend':''}">${s.nome?s.nome.split(' ')[0]:''}</div>`;
+    });
+    if (slots.length > 3) chips += `<div class="visita-chip">+${slots.length-3}</div>`;
+
+    html += `<div class="${cls}" onclick="${util?`selecionarDia(new Date('${ds}T12:00:00'));setView('dia')`:''}" >
+      <div class="num">${d}</div>
+      ${chips}
+    </div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+// =============================================
+// AGENDAMENTO
+// =============================================
+function abrirModalAgendamento() {
+  clienteSelecionadoAgendamento = null;
+  document.getElementById('agCliente').value = '';
+  document.getElementById('listaClientes').style.display = 'none';
+  document.getElementById('agData').value = dateStr(diaSelecionado);
+  document.getElementById('agHora').value = '10:00';
+  document.getElementById('agDuracao').value = '60';
+  document.getElementById('agObs').value = '';
+  document.getElementById('overlayAgendamento').style.display = 'flex';
+}
+
+function fecharModal() {
+  document.getElementById('overlayAgendamento').style.display = 'none';
+}
+
+function filtrarClientes(texto) {
+  const lista = document.getElementById('listaClientes');
+  if (texto.length < 2) { lista.style.display='none'; return; }
+  const matches = clientes.filter(c =>
+    c.nome_cliente.toLowerCase().includes(texto.toLowerCase()) ||
+    c.cod_cliente.includes(texto)
+  ).slice(0,8);
+
+  if (matches.length === 0) { lista.style.display='none'; return; }
+
+  lista.innerHTML = matches.map(c => `
+    <div onclick="selecionarClienteAg('${c.cod_cliente}_${c.loja}','${c.nome_cliente.replace(/'/g,"&#39;")}')"
+      style="padding:8px 10px;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border)">
+      <b>${c.nome_cliente}</b> <span style="color:var(--muted)">${c.municipio}</span>
+    </div>`).join('');
+  lista.style.display = 'block';
+}
+
+function selecionarClienteAg(id, nome) {
+  clienteSelecionadoAgendamento = {id, nome};
+  document.getElementById('agCliente').value = nome;
+  document.getElementById('listaClientes').style.display = 'none';
+}
+
+function salvarAgendamento() {
+  if (!clienteSelecionadoAgendamento) {
+    alert('Selecione um cliente da lista.');
+    return;
+  }
+  const ag = {
+    clienteId: clienteSelecionadoAgendamento.id,
+    nomeCliente: clienteSelecionadoAgendamento.nome,
+    data: document.getElementById('agData').value,
+    hora: document.getElementById('agHora').value,
+    duracao: parseInt(document.getElementById('agDuracao').value),
+    obs: document.getElementById('agObs').value,
+  };
+  agendamentos.push(ag);
+  salvarEstado();
+  fecharModal();
+  // Refaz roteiro automaticamente incorporando o agendamento
+  gerarRoteiro();
+}
+
+// =============================================
+// RESULTADO DE VISITA
+// =============================================
+function abrirModalVisita(data, idx) {
+  slotParaResultado = {data, idx};
+  const s = (roteiro[data]||[])[idx];
+  document.getElementById('visitaClienteNome').textContent = s ? s.nome : '—';
+  document.getElementById('visitaResultado').value = 'pedido';
+  document.getElementById('visitaValor').value = '';
+  document.getElementById('visitaObs').value = '';
+  document.getElementById('overlayVisita').style.display = 'flex';
+}
+
+function fecharModalVisita() {
+  document.getElementById('overlayVisita').style.display = 'none';
+  slotParaResultado = null;
+}
+
+function salvarResultado() {
+  if (!slotParaResultado) return;
+  const {data, idx} = slotParaResultado;
+  const s = (roteiro[data]||[])[idx];
+  if (!s) return;
+  const chv = data+'_'+(s.clienteId||'');
+  visitas[chv] = {
+    resultado: document.getElementById('visitaResultado').value,
+    valor: parseFloat(document.getElementById('visitaValor').value)||0,
+    obs: document.getElementById('visitaObs').value,
+    registradoEm: new Date().toISOString()
+  };
+  // Atualiza memória de longo prazo
+  if (s.clienteId) {
+    if (!memoria[s.clienteId]) memoria[s.clienteId] = {};
+    memoria[s.clienteId].ultimoResultado = visitas[chv].resultado;
+    memoria[s.clienteId].ultimaVisita = data;
+  }
+  salvarEstado();
+  fecharModalVisita();
+  renderTudo();
+}
+
+function clicarSlot(data, idx) {
+  const s = (roteiro[data]||[])[idx];
+  if (!s || s.tipo==='almoco'||s.tipo==='merchandising') return;
+  abrirModalVisita(data, idx);
+}
+
+// =============================================
+// SENHA E ROTEIRIZAÇÃO
+// =============================================
+function pedirSenhaRoteirizar() {
+  document.getElementById('senhaRoteirizar').value = '';
+  document.getElementById('senhaErr').style.display = 'none';
+  document.getElementById('senhaOverlay').classList.add('show');
+  setTimeout(() => document.getElementById('senhaRoteirizar').focus(), 100);
+}
+
+async function confirmarRoteirizacao() {
+  const v = document.getElementById('senhaRoteirizar').value;
+  const h = await sha256(v);
+  if (h !== hashRoteirizacaoCalculado) {
+    document.getElementById('senhaErr').style.display = 'block';
+    return;
+  }
+  document.getElementById('senhaOverlay').classList.remove('show');
+  document.getElementById('timeline').innerHTML = '<div class="msg-centro"><div class="spinner"></div><div>Gerando roteiro...</div></div>';
+  setTimeout(() => { gerarRoteiro(); renderTudo(); }, 100);
+}
+
+document.getElementById('senhaRoteirizar').addEventListener('keydown', e => {
+  if (e.key==='Enter') confirmarRoteirizacao();
+});
+
+// =============================================
+// TABS / VIEWS
+// =============================================
+function setView(v) {
+  viewAtual = v;
+  ['dia','semana','mes'].forEach(x => {
+    document.getElementById('view'+x.charAt(0).toUpperCase()+x.slice(1)).style.display = x===v?'flex':'none';
+    document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).className = 'tab'+(x===v?' ativo':'');
+  });
+  if (v==='dia') renderDia(diaSelecionado);
+  else if (v==='semana') renderSemana();
+  else renderMes();
+}
+
+function mudarMes(delta) {
+  mesSelecionado.setMonth(mesSelecionado.getMonth() + delta);
+  mesSelecionado.setDate(1);
+  carregarEstado();
+  renderTudo();
+}
+
+// =============================================
+// START
+// =============================================
+init();
+</script>
+</body>
+</html>
