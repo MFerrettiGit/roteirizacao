@@ -651,12 +651,12 @@ function gerarRoteiro(){
   });
 
   // ── SEGUNDA PASSAGEM: garante 100 visitas de clientes ──────
-  // As prospecções NÃO contam para a meta. Conta apenas tipo='visita'.
-  // Se ainda abaixo de 100, percorre os dias com tempo sobrando e
-  // insere o cliente mais próximo do último ponto (revisita se necessário).
+  // Itera todos os dias disponíveis, em cada um tenta encaixar o cliente
+  // MAIS PRÓXIMO do último ponto (ordena por distância, não por score).
+  // Repete até atingir 100 ou não conseguir mais inserir nada.
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
   let passExtra=0;
-  while(totalVis<CFG.metaVis&&passExtra<6){
+  while(totalVis<CFG.metaVis&&passExtra<10){
     passExtra++;
     let inseriu=false;
     for(const data of futuros){
@@ -666,17 +666,20 @@ function gerarRoteiro(){
       const visHoje=slots.filter(s=>s.tipo==='visita').length;
       if(visHoje>=CFG.maxPorDia) continue; // dia cheio
 
-      // Encontra último ponto de visita do dia para saber a hora e local livre
       const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
       if(!ultimaVis) continue;
       let curFim=h2m(ultimaVis.horaFim);
-      const locAtExtra={latitude:ultimaVis.lat?String(ultimaVis.lat):centro.latitude,longitude:ultimaVis.lon?String(ultimaVis.lon):centro.longitude};
+      const locAtExtra={latitude:ultimaVis.lat?String(ultimaVis.lat):String(centro.lat),longitude:ultimaVis.lon?String(ultimaVis.lon):String(centro.lon)};
 
-      // Tenta encaixar o cliente mais próximo que caiba no tempo
-      for(const c of rankRep){
+      // Ordena por distância ao último ponto — maximiza chance de caber no tempo restante
+      const candidatos=[...rankRep].sort((a,b)=>
+        travelMin(locAtExtra,{latitude:a.latitude,longitude:a.longitude})-
+        travelMin(locAtExtra,{latitude:b.latitude,longitude:b.longitude})
+      );
+      for(const c of candidatos){
         const travel=travelMin(locAtExtra,{latitude:c.latitude,longitude:c.longitude});
         const dur=duracaoCliente(c);
-        if(curFim+travel+dur<=CFG.horaFim-5){
+        if(curFim+travel+dur<=CFG.horaFim){
           curFim+=travel;
           slots.push({
             tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,
@@ -692,7 +695,7 @@ function gerarRoteiro(){
         }
       }
     }
-    if(!inseriu) break; // não consegue mais encaixar — carteira pequena demais
+    if(!inseriu) break;
   }
 
   // ── PROSPECÇÃO: máx 4, só em dias que sobra tempo ──────────
