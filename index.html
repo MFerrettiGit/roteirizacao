@@ -125,24 +125,48 @@
     <p>Entre com sua senha para acessar o roteiro do seu setor.</p>
   </div>
 
-  <!-- Login vendedor -->
+  <!-- Login -->
   <div class="login-card" id="boxLogin">
-    <h3>🔐 Acesso</h3>
-    <div class="field">
-      <label>Setor / Vendedor</label>
-      <select id="selSetor">
-        <option value="">Carregando setores...</option>
-      </select>
+    <!-- Abas -->
+    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:20px;">
+      <div id="abaVend" onclick="setAba('vend')"
+        style="flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:var(--azul);border-bottom:2px solid var(--azul);margin-bottom:-2px;">
+        🧑‍💼 Vendedor
+      </div>
+      <div id="abaGest" onclick="setAba('gest')"
+        style="flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">
+        👔 Gestor
+      </div>
     </div>
-    <div class="field">
-      <label>Senha</label>
-      <input type="password" id="inputSenha" placeholder="Digite sua senha" autocomplete="current-password">
+
+    <!-- Painel Vendedor -->
+    <div id="painelVend">
+      <div class="field">
+        <label>Seu setor</label>
+        <select id="selSetor">
+          <option value="">Selecione seu setor...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="inputSenha" placeholder="Senha do seu setor" autocomplete="current-password">
+      </div>
+      <div class="error" id="erroLogin">Senha incorreta. Tente novamente.</div>
+      <button class="btn" onclick="tentarLogin()">Entrar</button>
     </div>
-    <div class="error" id="erroLogin">Senha incorreta. Tente novamente.</div>
-    <button class="btn" id="btnEntrar" onclick="tentarLogin()">Entrar</button>
-    <p style="text-align:center;margin-top:12px;font-size:0.8rem;color:var(--muted)">
-      Acesso de gestor? Use a senha de gestor.
-    </p>
+
+    <!-- Painel Gestor -->
+    <div id="painelGest" style="display:none;">
+      <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:.85rem;color:var(--muted);">
+        Acesso de gestor permite visualizar os roteiros de <strong>todos os setores</strong>.
+      </div>
+      <div class="field">
+        <label>Senha de gestor</label>
+        <input type="password" id="inputSenhaGest" placeholder="Senha de gestor" autocomplete="current-password">
+      </div>
+      <div class="error" id="erroGest">Senha incorreta.</div>
+      <button class="btn" onclick="tentarLoginGestor()">Entrar como Gestor</button>
+    </div>
   </div>
 
   <!-- Visão gestor (todos os setores) -->
@@ -228,28 +252,26 @@ function popularSelectSetor() {
   });
 }
 
+function setAba(aba) {
+  const isVend = aba === 'vend';
+  document.getElementById('painelVend').style.display = isVend ? 'block' : 'none';
+  document.getElementById('painelGest').style.display = isVend ? 'none' : 'block';
+  document.getElementById('abaVend').style.cssText = `flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:${isVend?'var(--azul)':'var(--muted)'};border-bottom:2px solid ${isVend?'var(--azul)':'transparent'};margin-bottom:-2px;`;
+  document.getElementById('abaGest').style.cssText = `flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:${!isVend?'var(--azul)':'var(--muted)'};border-bottom:2px solid ${!isVend?'var(--azul)':'transparent'};margin-bottom:-2px;`;
+  if (isVend) document.getElementById('inputSenha').focus();
+  else document.getElementById('inputSenhaGest').focus();
+}
+
 async function tentarLogin() {
   const codVend = document.getElementById('selSetor').value;
   const senha = document.getElementById('inputSenha').value;
   const erro = document.getElementById('erroLogin');
   erro.style.display = 'none';
-
   if (!senha) return;
-
-  const h = await sha256(senha);
-
-  // Verifica gestor
-  if (h === hashGestor) {
-    sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify({tipo:'gestor'}));
-    mostrarGestor();
-    return;
-  }
-
-  // Verifica vendedor
   if (!codVend) { erro.textContent = 'Selecione o setor.'; erro.style.display = 'block'; return; }
   const vend = VENDEDORES.find(v => v.cod === codVend);
   if (!vend) { erro.textContent = 'Setor não encontrado.'; erro.style.display = 'block'; return; }
-
+  const h = await sha256(senha);
   const hEsperado = await sha256(vend.senha);
   if (h === hEsperado) {
     sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify({
@@ -258,6 +280,20 @@ async function tentarLogin() {
     abrirRoteiro(vend.setor, vend.cod);
   } else {
     erro.textContent = 'Senha incorreta.'; erro.style.display = 'block';
+  }
+}
+
+async function tentarLoginGestor() {
+  const senha = document.getElementById('inputSenhaGest').value;
+  const erro = document.getElementById('erroGest');
+  erro.style.display = 'none';
+  if (!senha) return;
+  const h = await sha256(senha);
+  if (h === hashGestor) {
+    sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify({tipo:'gestor'}));
+    mostrarGestor();
+  } else {
+    erro.style.display = 'block';
   }
 }
 
@@ -290,9 +326,8 @@ function logout() {
   location.reload();
 }
 
-document.getElementById('inputSenha').addEventListener('keydown', e => {
-  if (e.key === 'Enter') tentarLogin();
-});
+document.getElementById('inputSenha').addEventListener('keydown', e => { if (e.key === 'Enter') tentarLogin(); });
+document.getElementById('inputSenhaGest').addEventListener('keydown', e => { if (e.key === 'Enter') tentarLoginGestor(); });
 
 init();
 </script>
