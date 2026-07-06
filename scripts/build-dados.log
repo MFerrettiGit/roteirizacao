@@ -27,3 +27,10 @@ Invalid column name 'ZZLONG'."
 2026-07-06 15:26:54  Vendedores: 36 | Clientes com geo: 13311
 2026-07-06 15:26:56  clientes.js gerado (13311 clientes, 36 vendedores)
 2026-07-06 15:26:56  === build-dados concluÃ­do ===
+2026-07-06 15:29:15  === Iniciando build-dados ===
+2026-07-06 15:29:15  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-06 15:29:15  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-06 15:29:17  Query retornou 2215 registros.
+2026-07-06 15:29:18  Vendedores: 35 | Clientes com geo: 2215
+2026-07-06 15:29:18  clientes.js gerado (2215 clientes, 35 vendedores)
+2026-07-06 15:29:18  === build-dados concluÃ­do ===

@@ -58,4 +58,9 @@ WHERE SA1.D_E_L_E_T_ = ' '
   AND SA1.A1_MSBLQL  != '1'
   AND ISNULL(LTRIM(RTRIM(SA1.A1_ZZLAT)),  '') NOT IN ('', '0')
   AND ISNULL(LTRIM(RTRIM(SA1.A1_ZZLONG)), '') NOT IN ('', '0')
+  -- Somente clientes ativos: com pedido nos últimos 12 meses OU classificados
+  AND (
+        V.FAT_12M > 0
+     OR LTRIM(RTRIM(SA1.A1_CLASVEN)) IN ('A','B','C')
+  )
 ORDER BY SA3.A3_COD, ISNULL(V.FAT_12M, 0) DESC
