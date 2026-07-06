@@ -8,32 +8,29 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root,[data-theme="light"]{
-  --bg:#f0f2ff; --card:#ffffff; --card2:#f8faff; --text:#1a1a2e;
-  --muted:#6b7280; --border:#e2e8f0; --shadow:0 4px 24px rgba(43,47,168,.10);
+  --bg:#f0f2ff;--card:#ffffff;--card2:#f8faff;--text:#1a1a2e;
+  --muted:#6b7280;--border:#e2e8f0;--shadow:0 4px 24px rgba(43,47,168,.10);
   --shadow-sm:0 2px 8px rgba(43,47,168,.08);
-  --azul:#2B2FA8; --azul-dark:#1e2275; --azul-light:#4a4fc4; --azul-bg:#eef0ff;
-  --verde:#16a34a; --verde-bg:#dcfce7; --laranja:#ea580c; --laranja-bg:#ffedd5;
-  --amarelo:#ca8a04; --amarelo-bg:#fef9c3; --vermelho:#dc2626; --vermelho-bg:#fee2e2;
-  --roxo:#7c3aed; --roxo-bg:#f5f3ff;
+  --azul:#2B2FA8;--azul-dark:#1e2275;--azul-light:#4a4fc4;--azul-bg:#eef0ff;
+  --verde:#16a34a;--verde-bg:#dcfce7;--laranja:#ea580c;--laranja-bg:#ffedd5;
+  --amarelo:#ca8a04;--amarelo-bg:#fef9c3;--vermelho:#dc2626;--vermelho-bg:#fee2e2;
+  --roxo:#7c3aed;--roxo-bg:#f5f3ff;--cinza:#94a3b8;
   --header-bg:linear-gradient(135deg,#1e2275,#2B2FA8);
 }
 [data-theme="dark"]{
-  --bg:#0f1117; --card:#1a1d2e; --card2:#12151f; --text:#e2e8f0;
-  --muted:#9ca3af; --border:#2d3148; --shadow:0 4px 24px rgba(0,0,0,.4);
+  --bg:#0f1117;--card:#1a1d2e;--card2:#12151f;--text:#e2e8f0;
+  --muted:#9ca3af;--border:#2d3148;--shadow:0 4px 24px rgba(0,0,0,.4);
   --shadow-sm:0 2px 8px rgba(0,0,0,.3);
-  --azul:#6366f1; --azul-dark:#4f46e5; --azul-light:#818cf8; --azul-bg:#1e1b4b;
-  --verde:#22c55e; --verde-bg:#14532d; --laranja:#f97316; --laranja-bg:#431407;
-  --amarelo:#eab308; --amarelo-bg:#422006; --vermelho:#f87171; --vermelho-bg:#450a0a;
-  --roxo:#a78bfa; --roxo-bg:#2e1065;
+  --azul:#6366f1;--azul-dark:#4f46e5;--azul-light:#818cf8;--azul-bg:#1e1b4b;
+  --verde:#22c55e;--verde-bg:#14532d;--laranja:#f97316;--laranja-bg:#431407;
+  --amarelo:#eab308;--amarelo-bg:#422006;--vermelho:#f87171;--vermelho-bg:#450a0a;
+  --roxo:#a78bfa;--roxo-bg:#2e1065;--cinza:#64748b;
   --header-bg:linear-gradient(135deg,#0f1117,#1a1d2e);
 }
 *{box-sizing:border-box;margin:0;padding:0;transition:background-color .2s,border-color .2s,color .1s;}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;}
 
-header{
-  background:var(--header-bg);padding:0 20px;height:52px;display:flex;align-items:center;gap:12px;
-  box-shadow:0 2px 16px rgba(0,0,0,.25);position:relative;z-index:200;
-}
+header{background:var(--header-bg);padding:0 20px;height:52px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 16px rgba(0,0,0,.25);position:relative;z-index:200;}
 header img{height:30px;flex-shrink:0;}
 header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .setor-pill{background:rgba(255,255,255,.18);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:600;white-space:nowrap;}
@@ -45,12 +42,10 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 /* SIDEBAR */
 .sidebar{width:280px;min-width:280px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
 .sb-section{padding:14px 16px;border-bottom:1px solid var(--border);}
-
 .mes-nav{display:flex;align-items:center;gap:6px;margin-bottom:10px;}
 .mes-nav button{background:var(--azul-bg);border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--azul);font-size:1rem;display:flex;align-items:center;justify-content:center;}
 .mes-nav button:hover{background:var(--azul);color:#fff;}
 .mes-nav span{flex:1;text-align:center;font-weight:700;color:var(--azul);font-size:.88rem;}
-
 .mini-cal .row7{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;}
 .mini-cal .dh{text-align:center;font-size:.62rem;font-weight:700;color:var(--muted);padding:3px 0;}
 .dia-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:.72rem;cursor:pointer;position:relative;transition:background .12s;}
@@ -60,21 +55,18 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .dia-cell.sel{background:var(--azul-light);color:#fff;}
 .dia-cell.tem-rota::after{content:'';position:absolute;bottom:1px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--verde);}
 .dia-cell.nao-util{opacity:.3;cursor:default;}
-
 .stats-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .stat-box{background:var(--card2);border-radius:8px;padding:9px 10px;text-align:center;border:1px solid var(--border);}
 .stat-box .sv{font-size:1.2rem;font-weight:800;color:var(--azul);}
 .stat-box .sl{font-size:.62rem;color:var(--muted);margin-top:1px;line-height:1.2;}
 .stat-box.ok .sv{color:var(--verde);}
 .stat-box.warn .sv{color:var(--amarelo);}
-
 .sb-actions{padding:12px 16px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border);}
 .btn-main{padding:10px 14px;border-radius:9px;border:none;cursor:pointer;font-size:.85rem;font-weight:700;display:flex;align-items:center;gap:8px;transition:.15s;}
 .btn-roteirizar{background:var(--azul);color:#fff;}
 .btn-roteirizar:hover{background:var(--azul-dark);}
 .btn-agendar{background:var(--azul-bg);color:var(--azul);border:1.5px solid var(--azul);}
 .btn-agendar:hover{background:var(--azul);color:#fff;}
-
 .sb-dia{padding:12px 16px;overflow-y:auto;flex:1;}
 .sb-dia-label{font-size:.7rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:8px;}
 .resumo-item{display:flex;align-items:center;gap:8px;font-size:.8rem;padding:5px 0;border-bottom:1px solid var(--border);}
@@ -96,16 +88,11 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .dcard .dc-val{font-size:1.4rem;font-weight:800;color:var(--azul);}
 .dcard .dc-lbl{font-size:.7rem;color:var(--muted);font-weight:600;}
 .dcard .dc-sub{font-size:.72rem;color:var(--muted);margin-top:2px;line-height:1.4;}
-
 .tl-header{font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
 .tl-grid{display:flex;flex-direction:column;gap:8px;}
 
 /* Slot cards */
-.slot-card{
-  background:var(--card);border-radius:12px;border:1px solid var(--border);
-  box-shadow:var(--shadow-sm);display:flex;align-items:stretch;overflow:hidden;
-  transition:transform .12s,box-shadow .12s;
-}
+.slot-card{background:var(--card);border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-sm);display:flex;align-items:stretch;overflow:hidden;transition:transform .12s,box-shadow .12s;}
 .slot-card:hover{transform:translateY(-1px);box-shadow:var(--shadow);}
 .slot-side{width:5px;flex-shrink:0;}
 .slot-body{flex:1;padding:11px 14px;display:flex;gap:12px;align-items:center;}
@@ -124,27 +111,27 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .tag-ag{background:var(--azul-bg);color:var(--azul);}
 .tag-pros{background:var(--verde-bg);color:var(--verde);}
 .tag-merch{background:var(--roxo-bg);color:var(--roxo);}
-.tag-alerta{background:var(--vermelho-bg);color:var(--vermelho);}
-.tag-ok{background:var(--verde-bg);color:var(--verde);}
+.tag-rep{background:#fdf4ff;color:#7c3aed;border:1px solid #d8b4fe;}
+[data-theme="dark"] .tag-rep{background:#2e1065;color:#c4b5fd;}
+.tag-urgente{background:var(--vermelho-bg);color:var(--vermelho);}
 
-/* Prioridade recência */
-.prioridade-bar{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:44px;}
-.pb-val{font-size:.7rem;font-weight:800;}
-.pb-lbl{font-size:.6rem;color:var(--muted);}
-.pb-ring{width:32px;height:32px;border-radius:50%;border:3px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;}
-.pb-ring.urgente{border-color:var(--vermelho);color:var(--vermelho);background:var(--vermelho-bg);}
-.pb-ring.atencao{border-color:var(--amarelo);color:var(--amarelo);background:var(--amarelo-bg);}
-.pb-ring.normal{border-color:var(--verde);color:var(--verde);background:var(--verde-bg);}
+/* Badge dias sem pedido */
+.dsped{display:flex;flex-direction:column;align-items:center;min-width:44px;}
+.dsped-ring{width:34px;height:34px;border-radius:50%;border:3px solid;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:800;}
+.dsped-ring.u{border-color:var(--vermelho);color:var(--vermelho);background:var(--vermelho-bg);}
+.dsped-ring.a{border-color:var(--amarelo);color:var(--amarelo);background:var(--amarelo-bg);}
+.dsped-ring.n{border-color:var(--verde);color:var(--verde);background:var(--verde-bg);}
+.dsped-lbl{font-size:.58rem;color:var(--muted);margin-top:2px;}
 
 .slot-card.tipo-almoco .slot-body{opacity:.5;}
 .slot-card.tipo-merchandising .slot-side{background:var(--roxo);}
-.slot-card.tipo-almoco .slot-side{background:#94a3b8;}
+.slot-card.tipo-almoco .slot-side{background:var(--cinza);}
 .slot-card.tipo-prospeccao .slot-side{background:var(--verde);}
 .slot-card.tipo-agendamento .slot-side{background:var(--azul);}
 .slot-card.classe-A .slot-side{background:var(--vermelho);}
 .slot-card.classe-B .slot-side{background:var(--laranja);}
 .slot-card.classe-C .slot-side{background:var(--amarelo);}
-.slot-card.classe- .slot-side{background:#94a3b8;}
+.slot-card.classe- .slot-side{background:var(--cinza);}
 
 .empty-day{text-align:center;padding:48px 20px;color:var(--muted);}
 .empty-day .ei{font-size:2.5rem;margin-bottom:12px;}
@@ -174,6 +161,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .mn{font-size:.72rem;font-weight:700;color:var(--muted);}
 .mchip{font-size:.62rem;padding:2px 5px;border-radius:4px;margin-top:3px;background:var(--azul);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mchip.ag{background:var(--verde);}
+.mchip.rep{background:var(--roxo);opacity:.8;}
 
 /* VIEW RESUMO */
 .resumo-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
@@ -195,7 +183,13 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .dr-chips{display:flex;gap:6px;flex:1;flex-wrap:wrap;}
 .dr-chip{padding:3px 9px;border-radius:10px;font-size:.68rem;font-weight:700;background:var(--azul-bg);color:var(--azul);}
 .dr-chip.verde{background:var(--verde-bg);color:var(--verde);}
+.dr-chip.roxo{background:var(--roxo-bg);color:var(--roxo);}
 .dr-chip.laranja{background:var(--laranja-bg);color:var(--laranja);}
+
+/* Alerta meta */
+.meta-alerta{border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:.82rem;font-weight:700;}
+.meta-alerta.erro{background:var(--vermelho-bg);color:var(--vermelho);border:1.5px solid var(--vermelho);}
+.meta-alerta.ok{background:var(--verde-bg);color:var(--verde);border:1.5px solid var(--verde);}
 
 /* MAPA FLUTUANTE */
 .fab-mapa{position:fixed;bottom:20px;right:20px;width:52px;height:52px;background:var(--azul);color:#fff;border:none;border-radius:50%;font-size:1.3rem;cursor:pointer;box-shadow:0 4px 16px rgba(43,47,168,.4);z-index:500;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;}
@@ -237,10 +231,6 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .senha-box .sbtn{width:100%;padding:11px;background:var(--azul);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.9rem;}
 .senha-box .sbtn:hover{background:var(--azul-dark);}
 .senha-cancel{margin-top:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;}
-
-/* ALERTA META */
-.meta-alerta{background:var(--vermelho-bg);color:var(--vermelho);border:1.5px solid var(--vermelho);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:.82rem;font-weight:700;display:none;}
-.meta-ok{background:var(--verde-bg);color:var(--verde);border:1.5px solid var(--verde);}
 
 .spinner{width:36px;height:36px;border:4px solid var(--border);border-top-color:var(--azul);border-radius:50%;animation:spin .7s linear infinite;margin:32px auto;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -297,20 +287,19 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 
   <main class="main">
     <div class="tabs">
-      <div class="tab ativo" id="tabDia"     onclick="setView('dia')">📍 Dia</div>
-      <div class="tab"       id="tabSemana"  onclick="setView('semana')">📅 Semana</div>
-      <div class="tab"       id="tabMes"     onclick="setView('mes')">🗓️ Mês</div>
-      <div class="tab"       id="tabResumo"  onclick="setView('resumo')">📊 Resumo</div>
+      <div class="tab ativo" id="tabDia"    onclick="setView('dia')">📍 Dia</div>
+      <div class="tab"       id="tabSemana" onclick="setView('semana')">📅 Semana</div>
+      <div class="tab"       id="tabMes"    onclick="setView('mes')">🗓️ Mês</div>
+      <div class="tab"       id="tabResumo" onclick="setView('resumo')">📊 Resumo</div>
     </div>
 
-    <!-- VIEW DIA -->
     <div class="content-area" id="viewDia">
-      <div class="meta-alerta" id="metaAlerta"></div>
-      <div class="dia-cards" id="diaCards">
-        <div class="dcard"><div class="dc-icon">👥</div><div class="dc-val" id="dcClientes">—</div><div class="dc-lbl">Visitas hoje</div></div>
+      <div id="metaAlerta" style="display:none" class="meta-alerta erro"></div>
+      <div class="dia-cards">
+        <div class="dcard"><div class="dc-icon">👥</div><div class="dc-val" id="dcClientes">—</div><div class="dc-lbl">Visitas hoje</div><div class="dc-sub" id="dcRep"></div></div>
         <div class="dcard"><div class="dc-icon">🕐</div><div class="dc-val" id="dcHoras">—</div><div class="dc-lbl">H. chão hoje</div></div>
         <div class="dcard"><div class="dc-icon">🚗</div><div class="dc-val" id="dcKm">—</div><div class="dc-lbl">Km estimado</div></div>
-        <div class="dcard" style="grid-column:span 1"><div class="dc-icon">📍</div><div class="dc-val" style="font-size:.9rem" id="dcCidades">—</div><div class="dc-lbl">Cidades</div><div class="dc-sub" id="dcPros"></div></div>
+        <div class="dcard"><div class="dc-icon">📍</div><div class="dc-val" style="font-size:.9rem" id="dcCidades">—</div><div class="dc-lbl">Cidades</div><div class="dc-sub" id="dcPros"></div></div>
       </div>
       <div class="tl-header">
         <span id="tlData">ROTEIRO DO DIA</span>
@@ -319,17 +308,14 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
       <div class="tl-grid" id="timeline"></div>
     </div>
 
-    <!-- VIEW SEMANA -->
     <div class="content-area hidden" id="viewSemana">
       <div class="semana-wrap" id="semanaGrid"></div>
     </div>
 
-    <!-- VIEW MÊS -->
     <div class="content-area hidden" id="viewMes">
       <div class="mes-wrap" id="mesGrid"></div>
     </div>
 
-    <!-- VIEW RESUMO -->
     <div class="content-area hidden" id="viewResumo">
       <div class="resumo-wrap" id="resumoCards"></div>
       <div style="font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:10px;">ROTEIRO DIA A DIA</div>
@@ -338,9 +324,8 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
   </main>
 </div>
 
-<button class="fab-mapa" onclick="abrirMapa()" title="Ver mapa do roteiro">🗺️</button>
+<button class="fab-mapa" onclick="abrirMapa()" title="Ver mapa">🗺️</button>
 
-<!-- Modal mapa -->
 <div class="mapa-overlay" id="mapaOverlay" onclick="if(event.target===this)fecharMapa()">
   <div class="mapa-modal">
     <div class="mapa-modal-head">
@@ -351,10 +336,9 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
   </div>
 </div>
 
-<!-- Modal agendamento -->
 <div class="overlay hidden" id="ovAgendamento" onclick="if(event.target===this)fecharAg()">
   <div class="modal">
-    <h3>📅 Novo Agendamento Fixo</h3>
+    <h3>📅 Agendamento Fixo</h3>
     <div class="mf">
       <label>Cliente</label>
       <input type="text" id="agCliente" placeholder="Nome ou código" oninput="filtrarClientesAg(this.value)">
@@ -371,11 +355,10 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
   </div>
 </div>
 
-<!-- Senha -->
 <div class="senha-overlay" id="senhaOv">
   <div class="senha-box">
     <h3>⚙️ Gerar Roteiro</h3>
-    <p>Gera o roteiro mensal completo com base na carteira ativa do setor.</p>
+    <p>Gera o roteiro mensal por varredura geográfica, garantindo 100+ visitas.</p>
     <input type="password" id="senhaInput" placeholder="Senha" autocomplete="off">
     <div class="senha-err" id="senhaErr">Senha incorreta.</div>
     <button class="sbtn" onclick="confirmarRoteiro()">Gerar</button>
@@ -388,119 +371,77 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 // ── CONFIG ──────────────────────────────────────────────────
 const CFG = {
   horaIni: 8*60, horaFim: 17*60+48,
-  almoco: {ini: 11*60+30, fim: 13*60+30}, almocoMin: 60,
-  velKmH: 35, parking: 8,     // minutos de estacionamento/chegada
-  merch: 15,                  // merchandising matinal
-  pros: 45,                   // prospecção
+  almoco: {ini:11*60+30, fim:13*60+30}, almocoMin: 60,
+  velKmH: 35, parking: 8,
+  merch: 15, pros: 45,
   metaVis: 100, metaH: 100, metaProsp: 2,
-  maxAporDia: 2,              // máx clientes classe A por dia
+  minPorDia: 5, maxPorDia: 8,
+  maxAporDia: 2,
   tempoClasse: {A:90, B:60, C:45, '':30},
-  mixBonus: 15,               // +15min se mix_produtos > 10
-  maxVisitaDia: 120,          // teto de duração de visita
 };
-
 const FERIADOS = new Set(['2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01','2026-06-04','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25']);
 
 // ── ESTADO ──────────────────────────────────────────────────
 let COD='', SETOR='', CLIENTES=[];
-let mesSel = new Date(); mesSel.setDate(1);
-let diaSel = new Date();
+let mesSel=new Date(); mesSel.setDate(1);
+let diaSel=new Date();
 let roteiro={}, agendamentos=[], hashSenha='';
 let viewAtual='dia', mapaInst=null, clienteAgendamento=null;
 
-// ── INIT ───────────────────────────────────────────────────
+// ── INIT ────────────────────────────────────────────────────
 async function init(){
-  const p = new URLSearchParams(location.search);
-  COD = p.get('cod')||''; SETOR = p.get('setor')||'';
-  document.getElementById('headerSetor').textContent = SETOR||COD;
-  document.title = 'Roteiro — '+SETOR;
-  if (window.CLIENTES_DATA) CLIENTES = window.CLIENTES_DATA.filter(c=>c.cod_vendedor===COD);
-  hashSenha = await sha256('ferretti');
-  const tema = localStorage.getItem('ferretti_tema')||'light';
-  document.documentElement.setAttribute('data-theme', tema);
-  document.getElementById('btnTema').textContent = tema==='dark'?'☀️ Claro':'🌙 Escuro';
-  carregarEstado();
-  renderTudo();
-  selecionarDia(new Date());
+  const p=new URLSearchParams(location.search);
+  COD=p.get('cod')||''; SETOR=p.get('setor')||'';
+  document.getElementById('headerSetor').textContent=SETOR||COD;
+  document.title='Roteiro — '+SETOR;
+  if(window.CLIENTES_DATA) CLIENTES=window.CLIENTES_DATA.filter(c=>c.cod_vendedor===COD);
+  hashSenha=await sha256('ferretti');
+  const tema=localStorage.getItem('ferretti_tema')||'light';
+  document.documentElement.setAttribute('data-theme',tema);
+  document.getElementById('btnTema').textContent=tema==='dark'?'☀️ Claro':'🌙 Escuro';
+  carregarEstado(); renderTudo(); selecionarDia(new Date());
 }
 
-// ── TEMA ────────────────────────────────────────────────────
 function toggleTema(){
-  const t = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
-  document.documentElement.setAttribute('data-theme', t);
-  localStorage.setItem('ferretti_tema', t);
-  document.getElementById('btnTema').textContent = t==='dark'?'☀️ Claro':'🌙 Escuro';
+  const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',t);
+  localStorage.setItem('ferretti_tema',t);
+  document.getElementById('btnTema').textContent=t==='dark'?'☀️ Claro':'🌙 Escuro';
 }
 
-// ── UTILITÁRIOS ─────────────────────────────────────────────
-async function sha256(s){
-  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s.toLowerCase()));
-  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-function isUtil(d){
-  const x = d instanceof Date ? d : new Date(d+'T12:00:00');
-  if (x.getDay()===0||x.getDay()===6) return false;
-  return !FERIADOS.has(ds(x));
-}
-function ds(d){ return (d instanceof Date?d:new Date(d+'T12:00:00')).toISOString().slice(0,10); }
-function m2h(m){ return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; }
-function h2m(s){ const [h,m]=s.split(':').map(Number); return h*60+(m||0); }
-function haversine(la1,lo1,la2,lo2){
-  const R=6371, d1=(la2-la1)*Math.PI/180, d2=(lo2-lo1)*Math.PI/180;
-  const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-function distKm(a,b){
-  if (!a||!b) return 0;
-  return haversine(+a.latitude,+a.longitude,+b.latitude,+b.longitude);
-}
-function travelMin(a,b){ return Math.round((distKm(a,b)/CFG.velKmH)*60)+CFG.parking; }
-function duracaoCliente(c){
-  let t = CFG.tempoClasse[c.classificacao||'']||30;
-  if ((c.mix_produtos||0)>10) t += CFG.mixBonus;
-  return Math.min(t, CFG.maxVisitaDia);
-}
-function diasUteis(ano,mes){
-  const d=new Date(ano,mes,1), r=[];
-  while(d.getMonth()===mes){ if(isUtil(d)) r.push(ds(new Date(d))); d.setDate(d.getDate()+1); }
-  return r;
-}
-function nomeDataLongo(d){
-  return (d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
-}
-function diasSemPedido(c){
-  if (!c.ult_pedido) return 999;
-  return Math.round((new Date()-new Date(c.ult_pedido+'T12:00:00'))/86400000);
-}
-function kmDia(slots){
-  const pts=slots.filter(s=>s.lat&&s.lon);
-  let km=0;
-  for(let i=1;i<pts.length;i++) km+=haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);
-  return km;
-}
+// ── UTILS ───────────────────────────────────────────────────
+async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s.toLowerCase()));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+function isUtil(d){const x=d instanceof Date?d:new Date(d+'T12:00:00');if(x.getDay()===0||x.getDay()===6)return false;return!FERIADOS.has(ds(x));}
+function ds(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toISOString().slice(0,10);}
+function m2h(m){return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;}
+function h2m(s){const[h,m]=s.split(':').map(Number);return h*60+(m||0);}
+function haversine(la1,lo1,la2,lo2){const R=6371,d1=(la2-la1)*Math.PI/180,d2=(lo2-lo1)*Math.PI/180;const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+function distKm(a,b){if(!a||!b)return 0;return haversine(+(a.latitude||a.lat),+(a.longitude||a.lon),+(b.latitude||b.lat),+(b.longitude||b.lon));}
+function travelMin(a,b){return Math.round(distKm(a,b)/CFG.velKmH*60)+CFG.parking;}
+function duracaoCliente(c){let t=CFG.tempoClasse[c.classificacao||'']||30;if((c.mix_produtos||0)>10)t+=15;return Math.min(t,120);}
+function diasUteis(ano,mes){const d=new Date(ano,mes,1),r=[];while(d.getMonth()===mes){if(isUtil(d))r.push(ds(new Date(d)));d.setDate(d.getDate()+1);}return r;}
+function nomeDataLongo(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});}
+function diasSemPedido(c){if(!c.ult_pedido)return 999;return Math.round((new Date()-new Date(c.ult_pedido+'T12:00:00'))/86400000);}
+function kmDia(slots){const pts=slots.filter(s=>s.lat&&s.lon);let km=0;for(let i=1;i<pts.length;i++)km+=haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);return km;}
 
-// ── PERSISTÊNCIA ────────────────────────────────────────────
-function chv(t){ const ym=mesSel.toISOString().slice(0,7).replace('-',''); return `fr_rot_${t}_${COD}_${ym}`; }
-function salvar(){ localStorage.setItem(chv('r'),JSON.stringify(roteiro)); localStorage.setItem(chv('ag'),JSON.stringify(agendamentos)); }
-function carregarEstado(){
-  const r=localStorage.getItem(chv('r')), a=localStorage.getItem(chv('ag'));
-  roteiro = r?JSON.parse(r):{};
-  agendamentos = a?JSON.parse(a):[];
-}
+// ── PERSISTÊNCIA ─────────────────────────────────────────────
+function chv(t){const ym=mesSel.toISOString().slice(0,7).replace('-','');return`fr_rot_${t}_${COD}_${ym}`;}
+function salvar(){localStorage.setItem(chv('r'),JSON.stringify(roteiro));localStorage.setItem(chv('ag'),JSON.stringify(agendamentos));}
+function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.getItem(chv('ag'));roteiro=r?JSON.parse(r):{};agendamentos=a?JSON.parse(a):[];}
 
 // ══════════════════════════════════════════════════════════════
-// ALGORITMO DE ROTEIRIZAÇÃO
+// ALGORITMO — VARREDURA GEOGRÁFICA (estilo rota de caminhão)
 // ══════════════════════════════════════════════════════════════
 /*
-  Estratégia:
-  1. Pool = todos os clientes ativos com geolocalização válida
-  2. Clientes A: distribuídos preventivamente (máx 2/dia) para não sobrecarregar dias
-  3. Cada dia: preenche por nearest-neighbor puro a partir do primeiro cliente do dia
-     - Primeiro cliente = o pré-atribuído A (se houver) ou o de maior urgência ainda não visitado
-     - Demais: sempre o mais próximo disponível que cabe no tempo
-  4. Agendamentos fixos bloqueiam janelas e o NN respeita as lacunas
-  5. Segunda passagem: se total < meta, distribui os não-visitados nos dias com mais folga
-  6. Prospecção: adicionada nos dias com tempo sobrando ao final
+  LÓGICA:
+  1. Centróide da carteira = ponto de saída/chegada do vendedor (proxy)
+  2. Ordena clientes por ângulo em relação ao centróide (varredura angular 0°→360°)
+     → clientes geograficamente próximos ficam juntos, como fatias de pizza
+  3. Divide em N grupos diários (N = dias úteis), 5-8 clientes por grupo
+  4. Dentro de cada grupo: NN-sort a partir do centróide (vai e volta passando por todos)
+  5. Preenche até meta 100+: clientes com maior score de repetição são inseridos
+     nos dias com espaço, geograficamente mais próximos do grupo do dia
+  6. Score de repetição: faturamento mensal + dias sem pedido + mix baixo + classificação
 */
 function gerarRoteiro(){
   const ano=mesSel.getFullYear(), mes=mesSel.getMonth();
@@ -508,220 +449,213 @@ function gerarRoteiro(){
   const util=diasUteis(ano,mes);
   const futuros=util.filter(d=>d>=hojeStr);
 
-  if (!futuros.length||!CLIENTES.length) return;
-
-  // Preserva dias passados já roteirizados
   const novoRot={};
-  util.filter(d=>d<hojeStr).forEach(d=>{ if(roteiro[d]) novoRot[d]=roteiro[d]; });
+  util.filter(d=>d<hojeStr).forEach(d=>{if(roteiro[d])novoRot[d]=roteiro[d];});
 
-  // Pool de clientes com geo válida
-  const clientesGeo = CLIENTES.filter(c=>{
-    const lat=parseFloat(c.latitude), lon=parseFloat(c.longitude);
-    return !isNaN(lat)&&!isNaN(lon)&&lat!==0&&lon!==0;
+  if(!futuros.length||!CLIENTES.length){roteiro=novoRot;salvar();renderTudo();return;}
+
+  // Pool com geo válida
+  const geo=CLIENTES.filter(c=>{
+    const lat=+c.latitude, lon=+c.longitude;
+    return !isNaN(lat)&&!isNaN(lon)&&Math.abs(lat)>0.01&&Math.abs(lon)>0.01;
   });
-  if (!clientesGeo.length) { roteiro=novoRot; salvar(); renderTudo(); return; }
+  if(!geo.length){roteiro=novoRot;salvar();renderTudo();return;}
 
-  // Urgência: dias sem pedido (mais dias = mais urgente)
-  // Fórmula: urgência = diasSemPedido * peso_classe
-  const pesoClasse = {A:1.0, B:1.2, C:1.4, '':1.5};
-  function urgencia(c){ return diasSemPedido(c) * (pesoClasse[c.classificacao||'']||1.3); }
+  const nDias=futuros.length;
+  const MIN=CFG.minPorDia, MAX=CFG.maxPorDia;
 
-  // Pré-distribuição de clientes A (máx 2/dia, espalhados pelos dias)
-  const classA = clientesGeo.filter(c=>c.classificacao==='A').sort((a,b)=>urgencia(b)-urgencia(a));
-  const preA = {}; futuros.forEach(d=>preA[d]=[]);
-  classA.forEach((c,i)=>{ preA[futuros[i%futuros.length]].push(c); });
-  // Balanceia: dia com >2 doa o excesso para o vizinho
-  futuros.forEach(d=>{
-    while(preA[d].length>CFG.maxAporDia){
-      const extra=preA[d].pop();
-      const alvo=futuros.find(d2=>preA[d2].length<CFG.maxAporDia);
-      if(alvo) preA[alvo].push(extra); else preA[d].push(extra); // sem espaço: devolve
+  // 1. Centróide = ponto de saída/chegada do vendedor
+  const centro={
+    lat:geo.reduce((s,c)=>s+(+c.latitude),0)/geo.length,
+    lon:geo.reduce((s,c)=>s+(+c.longitude),0)/geo.length,
+    latitude:'',longitude:''
+  };
+  centro.latitude=String(centro.lat); centro.longitude=String(centro.lon);
+
+  // 2. Varredura angular: ordena clientes por ângulo a partir do centróide
+  const byAngle=[...geo].map(c=>({
+    ...c,
+    _ang:Math.atan2(+c.latitude-centro.lat, +c.longitude-centro.lon),
+    _dist:haversine(centro.lat,centro.lon,+c.latitude,+c.longitude)
+  })).sort((a,b)=>a._ang-b._ang);
+
+  // 3. Distribui por dia: fatia angular contínua para cada dia
+  //    Tenta equilibrar clientes por dia, garantindo ≥ MIN por dia
+  const capacidade=nDias*MAX; // total máximo de slots
+  const totalUnicos=byAngle.length;
+
+  // Slots únicos por dia: distribui uniformemente
+  const gruposUnicos=futuros.map(()=>[]);
+  const vpdBase=Math.ceil(totalUnicos/nDias); // visitas únicas/dia (alvo)
+  let ci=0;
+  futuros.forEach((d,di)=>{
+    const alvo=Math.min(MAX, Math.max(MIN, Math.ceil((totalUnicos-ci)/(nDias-di))));
+    for(let k=0;k<alvo&&ci<totalUnicos;k++) gruposUnicos[di].push({...byAngle[ci++],_rep:false});
+  });
+
+  // 4. Score para repetição
+  function scoreRep(c){
+    let s=0;
+    const fatM=(c.fat_12m||0)/12;
+    const dias=diasSemPedido(c);
+    const mix=c.mix_produtos||0;
+    const cls=c.classificacao||'';
+    // Faturamento mensal
+    if(fatM>8000)s+=40; else if(fatM>3000)s+=25; else if(fatM>800)s+=12; else if(fatM>0)s+=5;
+    // Dias sem pedido (urgência)
+    if(dias>=999)s+=30; else if(dias>90)s+=35; else if(dias>60)s+=25; else if(dias>30)s+=15; else if(dias>15)s+=8;
+    // Mix baixo = oportunidade de expansão
+    if(mix>0&&mix<4)s+=25; else if(mix<8)s+=12; else if(mix<12)s+=5;
+    // Classificação
+    s+={A:30,B:20,C:12,'':5}[cls]||5;
+    return s;
+  }
+  const rankRep=[...geo].sort((a,b)=>scoreRep(b)-scoreRep(a));
+
+  // 5. Preenche com repetições até atingir meta e mínimo/dia
+  // Estratégia: insere repetições no dia geograficamente mais próximo do cliente
+  function centroGrupo(grupo){
+    if(!grupo.length) return centro;
+    return{lat:grupo.reduce((s,c)=>s+(+c.latitude),0)/grupo.length,lon:grupo.reduce((s,c)=>s+(+c.longitude),0)/grupo.length,latitude:'',longitude:''};
+  }
+
+  // Garante mínimo/dia com repetições geograficamente próximas
+  futuros.forEach((d,di)=>{
+    const grupo=gruposUnicos[di];
+    while(grupo.length<MIN){
+      const cg=centroGrupo(grupo);
+      // Entre os top 20 por score, pega o mais próximo do centro do grupo
+      const candidatos=rankRep.filter(c=>!grupo.some(g=>g.cod_cliente===c.cod_cliente&&g.loja===c.loja));
+      if(!candidatos.length) break;
+      const top20=candidatos.slice(0,20);
+      const best=top20.reduce((b,c)=>distKm({lat:cg.lat,lon:cg.lon},{lat:+c.latitude,lon:+c.longitude})<distKm({lat:cg.lat,lon:cg.lon},{lat:+b.latitude,lon:+b.longitude})?c:b);
+      grupo.push({...best,_rep:true});
     }
   });
 
-  const globalVisitado=new Set();
+  // Adiciona repetições extras até atingir a meta total
+  let totalAtual=gruposUnicos.reduce((s,g)=>s+g.length,0);
+  let repRound=0;
+  while(totalAtual<CFG.metaVis){
+    // Dia com menos visitas e ainda com espaço
+    let diBest=0;
+    futuros.forEach((d,di)=>{
+      if(gruposUnicos[di].length<gruposUnicos[diBest].length&&gruposUnicos[di].length<MAX) diBest=di;
+    });
+    if(gruposUnicos[diBest].length>=MAX) break; // todos cheios
+    const cg=centroGrupo(gruposUnicos[diBest]);
+    const rep=rankRep[repRound%rankRep.length];
+    gruposUnicos[diBest].push({...rep,_rep:true});
+    repRound++;
+    totalAtual++;
+  }
 
-  // ── Função principal de construção de um dia ──────────────
-  function construirDia(data){
+  // 6. Ordena cada grupo como rota eficiente (NN começando do ponto mais perto do centro)
+  function nnSort(clientes,startLat,startLon){
+    if(clientes.length<=1)return clientes;
+    let rem=[...clientes];
+    // Ponto de partida: cliente mais próximo do centro (saída de casa)
+    let cur=rem.reduce((b,c)=>haversine(startLat,startLon,+c.latitude,+c.longitude)<haversine(startLat,startLon,+b.latitude,+b.longitude)?c:b);
+    const rota=[cur]; rem=rem.filter(c=>c!==cur);
+    while(rem.length){
+      const last=rota[rota.length-1];
+      const next=rem.reduce((b,c)=>haversine(+last.latitude,+last.longitude,+c.latitude,+c.longitude)<haversine(+last.latitude,+last.longitude,+b.latitude,+b.longitude)?c:b);
+      rota.push(next); rem=rem.filter(c=>c!==next);
+    }
+    return rota;
+  }
+
+  // 7. Constrói slots com horários para cada dia
+  futuros.forEach((data,di)=>{
     const agsFix=agendamentos.filter(a=>a.data===data).sort((a,b)=>h2m(a.hora)-h2m(b.hora));
-    agsFix.forEach(ag=>globalVisitado.add(ag.clienteId));
+    const clientesOrdenados=nnSort(gruposUnicos[di],centro.lat,centro.lon);
 
     const slots=[];
-    let cur=CFG.horaIni, almOk=false, locAt=null, aCount=0;
+    let cur=CFG.horaIni, almOk=false;
 
-    // Merchandising matinal
+    // Merchandising
     slots.push({tipo:'merchandising',nome:'Merchandising',horaIni:m2h(cur),horaFim:m2h(cur+CFG.merch),duracao:CFG.merch,classificacao:''});
     cur+=CFG.merch;
 
+    // Deslocamento de casa (centróide) até primeiro cliente
+    if(clientesOrdenados.length){
+      const tCasa=Math.min(40,travelMin(centro,{latitude:clientesOrdenados[0].latitude,longitude:clientesOrdenados[0].longitude}));
+      cur+=tCasa;
+    }
+
     function insertAlmoco(){
-      if (!almOk&&cur>=CFG.almoco.ini){
+      if(!almOk&&cur>=CFG.almoco.ini&&cur<CFG.almoco.fim+60){
         slots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(cur),horaFim:m2h(cur+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
         almOk=true; cur+=CFG.almocoMin;
       }
     }
-    function addVisita(c){
+
+    let agIdx=0;
+    let locAt=centro;
+
+    for(let vi=0;vi<clientesOrdenados.length;vi++){
+      insertAlmoco();
+
+      // Agendamento fixo que começa em breve?
+      while(agIdx<agsFix.length&&h2m(agsFix[agIdx].hora)<=cur+55){
+        const ag=agsFix[agIdx++];
+        if(h2m(ag.hora)>cur) cur=h2m(ag.hora);
+        insertAlmoco();
+        const dur=parseInt(ag.duracao||60);
+        slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,obs:ag.obs||'',municipio:ag.municipio||'',classificacao:''});
+        cur+=dur;
+        locAt={latitude:ag.lat||locAt.latitude,longitude:ag.lon||locAt.longitude};
+      }
+
+      const c=clientesOrdenados[vi];
+      const travel=vi===0?0:travelMin(locAt,{latitude:c.latitude,longitude:c.longitude});
       const dur=duracaoCliente(c);
-      slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,
+
+      if(cur+travel+dur>CFG.horaFim) break;
+
+      if(vi>0) cur+=travel;
+      insertAlmoco();
+      if(cur+dur>CFG.horaFim) break;
+
+      slots.push({
+        tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,
         horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,
         classificacao:c.classificacao,
-        lat:parseFloat(c.latitude),lon:parseFloat(c.longitude),
-        municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,
-        ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c)});
-      globalVisitado.add(c.cod_cliente+'_'+c.loja);
-      if (c.classificacao==='A') aCount++;
-      cur+=dur; locAt=c;
+        lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,
+        fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,
+        diasSemPedido:diasSemPedido(c),rep:c._rep||false,
+        scoreRep:scoreRep(c)
+      });
+      cur+=dur;
+      locAt={latitude:c.latitude,longitude:c.longitude};
     }
-    function addAgendamento(ag){
-      if (h2m(ag.hora)>cur) cur=h2m(ag.hora);
+
+    // Agendamentos não inseridos ainda
+    while(agIdx<agsFix.length){
+      const ag=agsFix[agIdx++];
+      if(h2m(ag.hora)>cur) cur=h2m(ag.hora);
       insertAlmoco();
       const dur=parseInt(ag.duracao||60);
-      slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,
-        horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,obs:ag.obs||'',
-        classificacao:'',municipio:ag.municipio||''});
-      globalVisitado.add(ag.clienteId);
+      slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,obs:ag.obs||'',municipio:ag.municipio||'',classificacao:''});
       cur+=dur;
     }
 
-    // Ancora do dia: primeiro cliente pré-atribuído (A) ou o mais urgente disponível
-    const preAtrib=(preA[data]||[]).filter(c=>!globalVisitado.has(c.cod_cliente+'_'+c.loja));
-    if (preAtrib.length){
-      const c=preAtrib[0];
-      const travel=locAt?travelMin(locAt,c):0;
-      if (cur+travel+duracaoCliente(c)<=CFG.horaFim-CFG.almocoMin){
-        cur+=travel; insertAlmoco(); addVisita(c);
-      }
-    } else {
-      // Busca o mais urgente não visitado
-      const nv=clientesGeo.filter(c=>!globalVisitado.has(c.cod_cliente+'_'+c.loja)&&(c.classificacao!=='A'||aCount<CFG.maxAporDia));
-      if (!nv.length){ novoRot[data]=slots; return; }
-      nv.sort((a,b)=>urgencia(b)-urgencia(a));
-      const c=nv[0];
-      if (cur+duracaoCliente(c)<=CFG.horaFim-CFG.almocoMin){ insertAlmoco(); addVisita(c); }
-    }
-
-    // Nearest-neighbor: preenche o dia
-    let agIdx=0;
-    while(cur<CFG.horaFim-30){
-      insertAlmoco();
-
-      // Verifica agendamento fixo próximo
-      if (agIdx<agsFix.length){
-        const ag=agsFix[agIdx];
-        const agM=h2m(ag.hora);
-        if (agM<=cur+50){ addAgendamento(ag); agIdx++; continue; }
-        // Se há tempo antes do agendamento, cabe mais um cliente pequeno?
-        const janela=agM-cur;
-        if (janela<35){ cur=agM; continue; } // lacuna pequena: avança para o ag
-      }
-
-      // Disponíveis: não visitados, sem ultrapassar A-class limit
-      const disponivel=clientesGeo.filter(c=>{
-        if (globalVisitado.has(c.cod_cliente+'_'+c.loja)) return false;
-        if (c.classificacao==='A'&&aCount>=CFG.maxAporDia) return false;
-        return true;
-      });
-      if (!disponivel.length) break;
-
-      // Nearest-neighbor a partir de locAt
-      const loc=locAt||clientesGeo[0];
-      disponivel.sort((a,b)=>{
-        const da=haversine(+loc.latitude,+loc.longitude,+a.latitude,+a.longitude);
-        const db=haversine(+loc.latitude,+loc.longitude,+b.latitude,+b.longitude);
-        // Desempate: urgência (bonus leve para não parar totalmente no puramente próximo)
-        return (da - db) || (urgencia(b)-urgencia(a))*0.01;
-      });
-
-      // Testa os 3 mais próximos: pega o que cabe no tempo
-      let escolhido=null;
-      for(const c of disponivel.slice(0,3)){
-        const travel=travelMin(loc,c);
-        const dur=duracaoCliente(c);
-        // Precisa caber antes do próximo agendamento (se houver)
-        const limite=agIdx<agsFix.length ? Math.min(CFG.horaFim, h2m(agsFix[agIdx].hora)-5) : CFG.horaFim;
-        const tempoComAlm=almOk?0:(cur+travel+dur>=CFG.almoco.fim?CFG.almocoMin:0);
-        if (cur+travel+dur+tempoComAlm<=limite){ escolhido=c; break; }
-      }
-      if (!escolhido) break;
-
-      cur+=travelMin(loc,escolhido);
-      insertAlmoco();
-      addVisita(escolhido);
-    }
-
-    // Agendamentos restantes (após o loop)
-    while(agIdx<agsFix.length){ addAgendamento(agsFix[agIdx++]); }
-
-    // Almoço forçado se não inserido
-    if (!almOk){
+    // Força almoço se não inserido
+    if(!almOk){
       const pos=Math.max(1,slots.findIndex(s=>s.tipo==='visita')+1);
-      const am=Math.max(CFG.almoco.ini,Math.min(CFG.almoco.fim,CFG.horaIni+CFG.merch+30));
+      const am=Math.min(CFG.almoco.fim,Math.max(CFG.almoco.ini,CFG.horaIni+CFG.merch+60));
       slots.splice(pos,0,{tipo:'almoco',nome:'Almoço',horaIni:m2h(am),horaFim:m2h(am+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
     }
 
+    // Prospecção se sobrar tempo
+    const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
+    if(ultimaVis&&h2m(ultimaVis.horaFim)+CFG.pros<=CFG.horaFim){
+      const lastFim=h2m(ultimaVis.horaFim);
+      slots.push({tipo:'prospeccao',nome:'Prospecção — novo cliente',horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:slots.filter(s=>s.municipio).slice(-1)[0]?.municipio||''});
+    }
+
     novoRot[data]=slots;
-  }
-
-  // ── Primeira passagem ──────────────────────────────────────
-  futuros.forEach(d=>construirDia(d));
-
-  // ── Segunda passagem: garante a meta ────────────────────────
-  // Conta visitas planejadas e tenta adicionar mais se abaixo da meta
-  function contarVisitas(rot){
-    return Object.values(rot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  }
-  let tentativas=0;
-  while(contarVisitas(novoRot)<CFG.metaVis&&tentativas<3){
-    tentativas++;
-    // Dias com mais folga (ordenados por clientes visitados DESC => queremos os com MENOS)
-    const diasOrdenados=[...futuros].sort((a,b)=>{
-      const va=(novoRot[a]||[]).filter(s=>s.tipo==='visita').length;
-      const vb=(novoRot[b]||[]).filter(s=>s.tipo==='visita').length;
-      return va-vb;
-    });
-    for(const data of diasOrdenados){
-      if(contarVisitas(novoRot)>=CFG.metaVis) break;
-      const slots=novoRot[data]||[];
-      const lastSlot=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
-      if(!lastSlot) continue;
-      let cur=h2m(lastSlot.horaFim);
-      const locAt=lastSlot;
-      const disponivel=clientesGeo.filter(c=>!globalVisitado.has(c.cod_cliente+'_'+c.loja));
-      if(!disponivel.length) break;
-      // Tenta adicionar 1-2 clientes no final do dia
-      for(const c of disponivel.slice(0,5)){
-        const travel=travelMin(locAt,c), dur=duracaoCliente(c);
-        if(cur+travel+dur<=CFG.horaFim){
-          cur+=travel;
-          slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,
-            horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,
-            classificacao:c.classificacao,
-            lat:parseFloat(c.latitude),lon:parseFloat(c.longitude),
-            municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,
-            ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c)});
-          globalVisitado.add(c.cod_cliente+'_'+c.loja);
-          cur+=dur;
-          break;
-        }
-      }
-    }
-  }
-
-  // ── Prospecção ─────────────────────────────────────────────
-  let prosCount=0;
-  for(const data of futuros){
-    if(prosCount>=CFG.metaProsp) break;
-    const slots=novoRot[data]||[];
-    const uteis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
-    if(!uteis.length) continue;
-    const lastFim=h2m(uteis[uteis.length-1].horaFim);
-    if(CFG.horaFim-lastFim>=CFG.pros){
-      const mun=slots.filter(s=>s.municipio).slice(-1)[0]?.municipio||'';
-      slots.push({tipo:'prospeccao',nome:'Prospecção — novo cliente',
-        horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,
-        classificacao:'',municipio:mun});
-      prosCount++;
-    }
-  }
+  });
 
   roteiro=novoRot;
   salvar();
@@ -730,124 +664,110 @@ function gerarRoteiro(){
 }
 
 // ── RENDER ──────────────────────────────────────────────────
-function renderTudo(){ renderMiniCal(); renderStats(); renderViewAtual(); }
+function renderTudo(){renderMiniCal();renderStats();renderViewAtual();}
 function renderViewAtual(){
-  if(viewAtual==='dia') renderDia(diaSel);
-  else if(viewAtual==='semana') renderSemana();
-  else if(viewAtual==='mes') renderMes();
+  if(viewAtual==='dia')renderDia(diaSel);
+  else if(viewAtual==='semana')renderSemana();
+  else if(viewAtual==='mes')renderMes();
   else renderResumo();
 }
 
-// ── MINI CAL ────────────────────────────────────────────────
 function renderMiniCal(){
-  const ano=mesSel.getFullYear(), mes=mesSel.getMonth();
+  const ano=mesSel.getFullYear(),mes=mesSel.getMonth();
   document.getElementById('labelMes').textContent=mesSel.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());
-  const prim=new Date(ano,mes,1), ult=new Date(ano,mes+1,0);
-  const hjStr=ds(new Date()), selStr=ds(diaSel);
+  const prim=new Date(ano,mes,1),ult=new Date(ano,mes+1,0);
+  const hjStr=ds(new Date()),selStr=ds(diaSel);
   let h='';
-  for(let i=0;i<prim.getDay();i++){const d=new Date(ano,mes,1-(prim.getDay()-i)); h+=`<div class="dia-cell outro-mes">${d.getDate()}</div>`;}
+  for(let i=0;i<prim.getDay();i++){const d=new Date(ano,mes,1-(prim.getDay()-i));h+=`<div class="dia-cell outro-mes">${d.getDate()}</div>`;}
   for(let d=1;d<=ult.getDate();d++){
-    const date=new Date(ano,mes,d), dstr=ds(date), util=isUtil(date), rota=!!(roteiro[dstr]?.length);
+    const date=new Date(ano,mes,d),dstr=ds(date),util=isUtil(date),rota=!!(roteiro[dstr]?.length);
     const cls='dia-cell'+(util?'':' nao-util')+(dstr===hjStr?' hoje':'')+(dstr===selStr?' sel':'')+(rota?' tem-rota':'');
     h+=`<div class="${cls}" ${util?`onclick="selecionarDia(new Date('${dstr}T12:00:00'))"`:''}>${d}</div>`;
   }
   document.getElementById('miniCal').innerHTML=h;
 }
 
-// ── STATS MÊS ───────────────────────────────────────────────
 function renderStats(){
   const ym=`${mesSel.getFullYear()}-${String(mesSel.getMonth()+1).padStart(2,'0')}`;
-  let vis=0, horas=0, pros=0, km=0;
+  let vis=0,horas=0,pros=0,km=0;
   Object.entries(roteiro).forEach(([data,slots])=>{
-    if(!data.startsWith(ym)) return;
+    if(!data.startsWith(ym))return;
     km+=kmDia(slots);
     slots.forEach(s=>{
-      if(s.tipo==='visita'){vis++; horas+=s.duracao/60;}
-      if(s.tipo==='prospeccao') pros++;
+      if(s.tipo==='visita'){vis++;horas+=s.duracao/60;}
+      if(s.tipo==='prospeccao')pros++;
     });
   });
-  const set=(id,v,meta,boxId)=>{
-    document.getElementById(id).textContent=v;
-    const b=document.getElementById(boxId);
-    if(b) b.className='stat-box'+(parseFloat(v)>=meta?' ok':parseFloat(v)>=meta*.7?' warn':'');
-  };
+  const set=(id,v,meta,boxId)=>{document.getElementById(id).textContent=v;const b=document.getElementById(boxId);if(b)b.className='stat-box'+(parseFloat(v)>=meta?' ok':parseFloat(v)>=meta*.7?' warn':'');};
   set('stVis',vis,CFG.metaVis,'stVisBox');
   set('stH',horas.toFixed(1)+'h',CFG.metaH,'stHBox');
   set('stP',pros,CFG.metaProsp,'stPBox');
   document.getElementById('stKm').textContent='~'+Math.round(km)+'km';
 }
 
-// ── VIEW DIA ─────────────────────────────────────────────────
 function selecionarDia(d){
   diaSel=d instanceof Date?d:new Date(d+'T12:00:00');
   renderMiniCal();
-  if(viewAtual==='dia') renderDia(diaSel);
+  if(viewAtual==='dia')renderDia(diaSel);
   renderSbDia();
 }
 
 function renderDia(date){
-  const dstr=ds(date), slots=roteiro[dstr]||[];
+  const dstr=ds(date),slots=roteiro[dstr]||[];
   const hoje=ds(new Date());
-
-  // Cards
   const vis=slots.filter(s=>s.tipo==='visita');
+  const reps=vis.filter(s=>s.rep);
   const km=Math.round(kmDia(slots));
   const horas=(vis.reduce((s,x)=>s+x.duracao,0)/60).toFixed(1);
   const cids=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
   const pros=slots.filter(s=>s.tipo==='prospeccao');
 
   document.getElementById('dcClientes').textContent=vis.length||'—';
+  document.getElementById('dcRep').textContent=reps.length?`↩ ${reps.length} revisita${reps.length>1?'s':''}`:vis.length?`✓ ${vis.length} únicas`:'';
   document.getElementById('dcHoras').textContent=vis.length?horas+'h':'—';
   document.getElementById('dcKm').textContent=km?km+'km':'—';
   document.getElementById('dcCidades').textContent=cids.join(' · ')||'—';
-  document.getElementById('dcPros').textContent=pros.length?'🌱 '+( pros[0].municipio||'Prospecção'):'';
+  document.getElementById('dcPros').textContent=pros.length?'🌱 prospecção':'';
 
-  // Alerta meta global
+  // Alerta meta
   const ym=`${mesSel.getFullYear()}-${String(mesSel.getMonth()+1).padStart(2,'0')}`;
   const totalVis=Object.entries(roteiro).filter(([d])=>d.startsWith(ym)).reduce((s,[,sl])=>s+sl.filter(x=>x.tipo==='visita').length,0);
   const alerta=document.getElementById('metaAlerta');
-  if(totalVis>0&&totalVis<CFG.metaVis){
-    alerta.textContent=`⚠️ Roteiro com ${totalVis} visitas planejadas — abaixo da meta de ${CFG.metaVis}. Refaça o roteiro ou revise a carteira de clientes.`;
-    alerta.style.display='block';alerta.className='meta-alerta';
-  } else if(totalVis>=CFG.metaVis){
-    alerta.textContent=`✅ Meta atingida: ${totalVis} visitas planejadas para o mês.`;
-    alerta.style.display='block';alerta.className='meta-alerta meta-ok';
-  } else { alerta.style.display='none'; }
+  if(totalVis>0&&totalVis<CFG.metaVis){alerta.textContent=`⚠️ ${totalVis} visitas planejadas no mês — abaixo da meta de ${CFG.metaVis}. Refaça o roteiro.`;alerta.style.display='block';alerta.className='meta-alerta erro';}
+  else if(totalVis>=CFG.metaVis){alerta.textContent=`✅ ${totalVis} visitas planejadas — meta de ${CFG.metaVis} atingida.`;alerta.style.display='block';alerta.className='meta-alerta ok';}
+  else alerta.style.display='none';
 
-  const nomeData=nomeDataLongo(date);
-  document.getElementById('tlData').textContent=nomeData.charAt(0).toUpperCase()+nomeData.slice(1);
+  const nomeD=nomeDataLongo(date);
+  document.getElementById('tlData').textContent=nomeD.charAt(0).toUpperCase()+nomeD.slice(1);
   document.getElementById('tlDataCompleta').textContent=dstr===hoje?'HOJE':'';
 
   const tl=document.getElementById('timeline');
-  if(!isUtil(date)){ tl.innerHTML=`<div class="empty-day"><div class="ei">🏖️</div><p>Dia não útil.</p></div>`; return; }
-  if(!slots.length){ tl.innerHTML=`<div class="empty-day"><div class="ei">📭</div><p>Sem roteiro para este dia.<br><small>Clique em <b>Fazer Roteirização</b> para gerar o roteiro do mês.</small></p></div>`; return; }
+  if(!isUtil(date)){tl.innerHTML=`<div class="empty-day"><div class="ei">🏖️</div><p>Dia não útil.</p></div>`;return;}
+  if(!slots.length){tl.innerHTML=`<div class="empty-day"><div class="ei">📭</div><p>Sem roteiro para este dia.<br><small>Clique em <b>Fazer Roteirização</b> para gerar o roteiro do mês.</small></p></div>`;return;}
 
   let h='';
   slots.forEach(s=>{
-    const corSide = s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'#94a3b8'}[s.classificacao]||'#94a3b8')
-                  : s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)':s.tipo==='merchandising'?'var(--roxo)':'#94a3b8';
-    let tags='';
-    if(s.tipo==='visita'&&s.classificacao) tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
-    if(s.tipo==='agendamento') tags+=`<span class="tag tag-ag">🔒 Agendado</span>`;
-    if(s.tipo==='prospeccao') tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;
-    if(s.tipo==='merchandising') tags+=`<span class="tag tag-merch">Merchandising</span>`;
+    const corSide=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'var(--cinza)'}[s.classificacao]||'var(--cinza)')
+      :s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)':s.tipo==='merchandising'?'var(--roxo)':'var(--cinza)';
 
-    let sub='', urgPart='';
+    let tags='',sub='',badge='';
     if(s.tipo==='visita'){
+      if(s.classificacao) tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
+      if(s.rep) tags+=`<span class="tag tag-rep">↩ Revisita</span>`;
       if(s.municipio) sub+=`<span>📍 ${s.municipio}</span>`;
-      if(s.fat12m) sub+=`<span>R$ ${(s.fat12m/1000).toFixed(0)}k/ano</span>`;
+      if(s.fat12m) sub+=`<span>R$ ${(s.fat12m/1000).toFixed(0)}k/ano · ${Math.round(s.fat12m/12/100)/10}k/mês</span>`;
       if(s.mix) sub+=`<span>${s.mix} SKUs</span>`;
       if(s.ult_pedido) sub+=`<span>Últ. pedido: ${new Date(s.ult_pedido+'T12:00:00').toLocaleDateString('pt-BR')}</span>`;
-
       const dias=s.diasSemPedido||999;
-      const urgCls=dias>90?'urgente':dias>45?'atencao':'normal';
-      const urgTxt=dias>=999?'N/A':dias+'d';
-      urgPart=`<div class="prioridade-bar"><div class="pb-ring ${urgCls}" title="Dias sem pedido">${urgTxt}</div><div class="pb-lbl">s/pedido</div></div>`;
-
-      if(dias>90) tags+=`<span class="tag tag-alerta">⚠️ ${dias}d sem pedido</span>`;
+      const urgCls=dias>90?'u':dias>45?'a':'n';
+      const urgTxt=dias>=999?'S/D':dias+'d';
+      badge=`<div class="dsped"><div class="dsped-ring ${urgCls}" title="Dias sem pedido">${urgTxt}</div><div class="dsped-lbl">s/pedido</div></div>`;
+      if(dias>90) tags+=`<span class="tag tag-urgente">⚠️ ${dias}d</span>`;
     }
+    if(s.tipo==='agendamento'){tags+=`<span class="tag tag-ag">🔒 Agendado</span>`;if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;}
+    if(s.tipo==='prospeccao'){tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;}
+    if(s.tipo==='merchandising'){tags+=`<span class="tag tag-merch">Merchandising</span>`;}
     if(s.municipio&&s.tipo!=='visita') sub+=`<span>📍 ${s.municipio}</span>`;
-    if(s.obs) sub+=`<span>📝 ${s.obs}</span>`;
 
     h+=`<div class="slot-card tipo-${s.tipo} classe-${s.classificacao||''}">
       <div class="slot-side" style="background:${corSide}"></div>
@@ -855,7 +775,7 @@ function renderDia(date){
         <div class="slot-hora-col">
           <div class="hora">${s.horaIni||''}</div>
           <div class="dur">${s.duracao}min</div>
-          ${s.horaFim?`<div class="dur" style="margin-top:2px">${s.horaFim}</div>`:''}
+          ${s.horaFim?`<div class="dur" style="margin-top:1px">${s.horaFim}</div>`:''}
         </div>
         <div class="slot-divider"></div>
         <div class="slot-info">
@@ -863,7 +783,7 @@ function renderDia(date){
           ${sub?`<div class="slot-sub">${sub}</div>`:''}
           ${tags?`<div class="slot-tags">${tags}</div>`:''}
         </div>
-        ${urgPart}
+        ${badge}
       </div>
     </div>`;
   });
@@ -871,38 +791,38 @@ function renderDia(date){
 }
 
 function renderSbDia(){
-  const dstr=ds(diaSel), slots=roteiro[dstr]||[];
+  const dstr=ds(diaSel),slots=roteiro[dstr]||[];
   const div=document.getElementById('sbDiaResumo');
-  if(!slots.length){ div.textContent='Sem roteiro para este dia.'; return; }
+  if(!slots.length){div.textContent='Sem roteiro para este dia.';return;}
   const vis=slots.filter(s=>s.tipo==='visita');
+  const reps=vis.filter(s=>s.rep).length;
   const km=Math.round(kmDia(slots));
   const horas=(vis.reduce((s,x)=>s+x.duracao,0)/60).toFixed(1);
   const cids=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
   div.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px;">
-    <div class="resumo-item"><span class="ri-dot" style="background:var(--azul)"></span><b>${vis.length}</b> visitas planejadas</div>
+    <div class="resumo-item"><span class="ri-dot" style="background:var(--azul)"></span><b>${vis.length}</b> visitas (${vis.length-reps} únicas${reps?`, ${reps} revisitas`:''})</div>
     <div class="resumo-item"><span class="ri-dot" style="background:var(--verde)"></span><b>${horas}h</b> chão de loja</div>
     <div class="resumo-item"><span class="ri-dot" style="background:var(--laranja)"></span><b>~${km}km</b> estimado</div>
     ${cids.map(c=>`<div class="resumo-item"><span class="ri-dot" style="background:var(--muted)"></span>${c}</div>`).join('')}
   </div>`;
 }
 
-// ── VIEW SEMANA ──────────────────────────────────────────────
 function renderSemana(){
-  const ini=semanaIni(diaSel), hoje=ds(new Date());
+  const ini=semanaIni(diaSel),hoje=ds(new Date());
   let h='';
   for(let i=0;i<5;i++){
-    const d=new Date(ini); d.setDate(d.getDate()+i);
-    const dstr=ds(d), slots=roteiro[dstr]||[];
+    const d=new Date(ini);d.setDate(d.getDate()+i);
+    const dstr=ds(d),slots=roteiro[dstr]||[];
     const nomeD=d.toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short'});
     const hCls=dstr===hoje?'hoje-h':dstr<hoje?'passado-h':'';
     h+=`<div class="sem-col"><div class="sem-col-head ${hCls}">${nomeD}</div><div class="sem-col-body">`;
-    if(!isUtil(d)) h+=`<div style="text-align:center;padding:16px;font-size:.75rem;color:var(--muted)">—</div>`;
-    else if(!slots.length) h+=`<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">Sem roteiro</div>`;
+    if(!isUtil(d))h+=`<div style="text-align:center;padding:16px;font-size:.75rem;color:var(--muted)">—</div>`;
+    else if(!slots.length)h+=`<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">Sem roteiro</div>`;
     else{
       slots.filter(s=>s.tipo!=='almoco').forEach(s=>{
-        const borda=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'#94a3b8'}[s.classificacao]||'#94a3b8'):'var(--azul)';
+        const borda=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'var(--cinza)'}[s.classificacao]||'var(--cinza)'):'var(--azul)';
         h+=`<div class="sem-slot" style="border-left-color:${borda}" onclick="selecionarDia(new Date('${dstr}T12:00:00'));setView('dia')">
-          <div class="sh">${s.horaIni||''} · ${s.duracao}min</div>
+          <div class="sh">${s.horaIni||''} · ${s.duracao}min${s.rep?' · ↩':''}</div>
           <div class="sn">${s.nome||''}</div>
           ${s.municipio?`<div class="sc">📍 ${s.municipio}</div>`:''}
         </div>`;
@@ -912,21 +832,20 @@ function renderSemana(){
   }
   document.getElementById('semanaGrid').innerHTML=h;
 }
-function semanaIni(d){ const x=new Date(d), dw=x.getDay(); x.setDate(x.getDate()-(dw===0?6:dw-1)); return x; }
+function semanaIni(d){const x=new Date(d),dw=x.getDay();x.setDate(x.getDate()-(dw===0?6:dw-1));return x;}
 
-// ── VIEW MÊS ─────────────────────────────────────────────────
 function renderMes(){
-  const ano=mesSel.getFullYear(), mes=mesSel.getMonth();
-  const hoje=ds(new Date()), selStr=ds(diaSel);
+  const ano=mesSel.getFullYear(),mes=mesSel.getMonth();
+  const hoje=ds(new Date());
   let h=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="mes-hd">${d}</div>`).join('');
-  const prim=new Date(ano,mes,1), ult=new Date(ano,mes+1,0);
-  for(let i=0;i<prim.getDay();i++) h+=`<div class="mes-cel outro-m"></div>`;
+  const prim=new Date(ano,mes,1),ult=new Date(ano,mes+1,0);
+  for(let i=0;i<prim.getDay();i++)h+=`<div class="mes-cel outro-m"></div>`;
   for(let d=1;d<=ult.getDate();d++){
-    const date=new Date(ano,mes,d), dstr=ds(date), util=isUtil(date);
+    const date=new Date(ano,mes,d),dstr=ds(date),util=isUtil(date);
     const vis=(roteiro[dstr]||[]).filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
     const cls='mes-cel'+(util?'':' nao-util-m')+(dstr===hoje?' hoje-m':'');
-    let chips=vis.slice(0,2).map(s=>`<div class="mchip ${s.tipo==='agendamento'?'ag':''}">${s.nome?s.nome.split(' ')[0]:''}</div>`).join('');
-    if(vis.length>2) chips+=`<div class="mchip">+${vis.length-2}</div>`;
+    let chips=vis.slice(0,2).map(s=>`<div class="mchip ${s.tipo==='agendamento'?'ag':s.rep?'rep':''}">${s.nome?s.nome.split(' ')[0]:''}</div>`).join('');
+    if(vis.length>2)chips+=`<div class="mchip">+${vis.length-2}</div>`;
     h+=`<div class="${cls}" onclick="${util?`selecionarDia(new Date('${dstr}T12:00:00'));setView('dia')`:''}">
       <div class="mn">${d}</div>${chips}
     </div>`;
@@ -934,26 +853,19 @@ function renderMes(){
   document.getElementById('mesGrid').innerHTML=h;
 }
 
-// ── VIEW RESUMO ───────────────────────────────────────────────
 function renderResumo(){
   const ym=`${mesSel.getFullYear()}-${String(mesSel.getMonth()+1).padStart(2,'0')}`;
   const diasMes=Object.keys(roteiro).filter(d=>d.startsWith(ym)).sort();
-  let tv=0,tk=0,th=0,tp=0;
-  const contClasse={A:0,B:0,C:0,'':0};
-  const cidadesSet=new Set();
-  const urgentes=[];
+  let tv=0,tk=0,th=0,tp=0,trep=0;
+  const contCls={A:0,B:0,C:0,'':0};
+  const cidsSet=new Set();
 
   diasMes.forEach(data=>{
     const slots=roteiro[data]||[];
     tk+=kmDia(slots);
     slots.forEach(s=>{
-      if(s.tipo==='visita'){
-        tv++; th+=s.duracao/60;
-        contClasse[s.classificacao||'']=(contClasse[s.classificacao||'']||0)+1;
-        if(s.municipio) cidadesSet.add(s.municipio);
-        if((s.diasSemPedido||0)>90) urgentes.push(s);
-      }
-      if(s.tipo==='prospeccao') tp++;
+      if(s.tipo==='visita'){tv++;th+=s.duracao/60;contCls[s.classificacao||'']=(contCls[s.classificacao||'']||0)+1;if(s.municipio)cidsSet.add(s.municipio);if(s.rep)trep++;}
+      if(s.tipo==='prospeccao')tp++;
     });
   });
 
@@ -965,8 +877,7 @@ function renderResumo(){
     <div class="res-card">
       <h4>METAS DO MÊS</h4>
       <div class="res-list">
-        <div class="res-item"><span class="ri-label">Visitas planejadas</span><span class="ri-val ${tv>=CFG.metaVis?'':''}">
-          ${tv<CFG.metaVis?`<span style="color:var(--vermelho)">⚠️ ${tv}</span>`:`<span style="color:var(--verde)">✓ ${tv}`} / ${CFG.metaVis}</span></div>
+        <div class="res-item"><span class="ri-label">Visitas planejadas</span><span class="ri-val" style="color:${tv>=CFG.metaVis?'var(--verde)':'var(--vermelho)'}">${tv>=CFG.metaVis?'✅':'⚠️'} ${tv} / ${CFG.metaVis}</span></div>
         <div class="progress-bar"><div class="progress-fill ${pV>=100?'ok':pV>=70?'':'warn'}" style="width:${pV}%"></div></div>
         <div class="res-item"><span class="ri-label">H. chão de loja</span><span class="ri-val">${th.toFixed(1)}h / ${CFG.metaH}h</span></div>
         <div class="progress-bar"><div class="progress-fill ${pH>=100?'ok':''}" style="width:${pH}%"></div></div>
@@ -980,30 +891,31 @@ function renderResumo(){
       <div class="res-sub">distância total estimada</div>
       <div class="res-list" style="margin-top:12px">
         <div class="res-item"><span class="ri-label">Dias com roteiro</span><span class="ri-val">${diasMes.length}</span></div>
-        <div class="res-item"><span class="ri-label">Cidades cobertas</span><span class="ri-val">${cidadesSet.size}</span></div>
+        <div class="res-item"><span class="ri-label">Cidades cobertas</span><span class="ri-val">${cidsSet.size}</span></div>
         <div class="res-item"><span class="ri-label">Média visitas/dia</span><span class="ri-val">${diasMes.length?(tv/diasMes.length).toFixed(1):'—'}</span></div>
-        <div class="res-item"><span class="ri-label">Clientes >90d s/pedido</span><span class="ri-val" style="color:var(--vermelho)">${urgentes.length}</span></div>
+        <div class="res-item"><span class="ri-label">Revisitas planejadas</span><span class="ri-val" style="color:var(--roxo)">${trep}</span></div>
       </div>
     </div>
     <div class="res-card">
       <h4>CLIENTES POR NÍVEL</h4>
-      ${[['A','Nível A (estratégico)','var(--vermelho)'],['B','Nível B','var(--laranja)'],['C','Nível C','var(--amarelo)'],['','Sem classificação','var(--muted)']].map(([cls,lbl,cor])=>`
+      ${[['A','Estratégico (A)','var(--vermelho)'],['B','Importante (B)','var(--laranja)'],['C','Desenvolvimento (C)','var(--amarelo)'],['','Sem classificação','var(--cinza)']].map(([cls,lbl,cor])=>`
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
           <div style="width:10px;height:10px;border-radius:50%;background:${cor};flex-shrink:0"></div>
           <span style="flex:1;font-size:.8rem;color:var(--muted)">${lbl}</span>
-          <span style="font-weight:700">${contClasse[cls]||0}</span>
+          <span style="font-weight:700">${contCls[cls]||0}</span>
         </div>`).join('')}
-      <div style="margin-top:8px;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:8px;">
-        Máx. ${CFG.maxAporDia} clientes A por dia (distribuídos automaticamente)
+      <div style="margin-top:8px;font-size:.72rem;color:var(--muted);border-top:1px solid var(--border);padding-top:8px;">
+        Algoritmo: varredura angular por região · máx ${CFG.maxAporDia} A/dia<br>
+        Revisitas por: faturamento · dias s/pedido · mix baixo
       </div>
     </div>
   `;
 
-  // Dia a dia
   let hDias='';
   diasMes.forEach(data=>{
     const slots=roteiro[data]||[];
     const vis=slots.filter(s=>s.tipo==='visita');
+    const reps=vis.filter(s=>s.rep).length;
     const km=Math.round(kmDia(slots));
     const cids=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
     const pros=slots.filter(s=>s.tipo==='prospeccao');
@@ -1012,6 +924,7 @@ function renderResumo(){
       <div class="dr-data">${nomeD}</div>
       <div class="dr-chips">
         <span class="dr-chip">${vis.length} visitas</span>
+        ${reps?`<span class="dr-chip roxo">↩ ${reps} revisita${reps>1?'s':''}</span>`:''}
         <span class="dr-chip verde">~${km}km</span>
         ${cids.map(c=>`<span class="dr-chip">${c}</span>`).join('')}
         ${pros.length?`<span class="dr-chip verde">🌱 prospecção</span>`:''}
@@ -1021,80 +934,46 @@ function renderResumo(){
   document.getElementById('resumoDiaDia').innerHTML=hDias||`<div style="text-align:center;padding:32px;color:var(--muted);">Sem roteiro gerado ainda.</div>`;
 }
 
-// ── MAPA FLUTUANTE ───────────────────────────────────────────
+// ── MAPA ─────────────────────────────────────────────────────
 function abrirMapa(){
-  if(!mapaInst){ mapaInst=L.map('mapaModal'); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(mapaInst); }
+  if(!mapaInst){mapaInst=L.map('mapaModal');L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(mapaInst);}
   document.getElementById('mapaOverlay').classList.add('show');
-  setTimeout(()=>{ mapaInst.invalidateSize(); renderMapa(); },200);
+  setTimeout(()=>{mapaInst.invalidateSize();renderMapa();},200);
 }
-function fecharMapa(){ document.getElementById('mapaOverlay').classList.remove('show'); }
-
-let _mapaLayers=[];
+function fecharMapa(){document.getElementById('mapaOverlay').classList.remove('show');}
+let _ml=[];
 function renderMapa(){
-  _mapaLayers.forEach(l=>mapaInst.removeLayer(l)); _mapaLayers=[];
-  const dstr=ds(diaSel), slots=(roteiro[dstr]||[]).filter(s=>s.lat&&s.lon);
+  _ml.forEach(l=>mapaInst.removeLayer(l));_ml=[];
+  const dstr=ds(diaSel),slots=(roteiro[dstr]||[]).filter(s=>s.lat&&s.lon);
   document.getElementById('mapaTitle').textContent='Roteiro — '+nomeDataLongo(diaSel);
-  if(!slots.length){ mapaInst.setView([-21,-47],9); return; }
-  const CORES={A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#6b7280'};
+  if(!slots.length){mapaInst.setView([-21,-47],9);return;}
+  const COR={A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#6b7280'};
   const ll=[];
   slots.forEach((s,i)=>{
-    const cor=CORES[s.classificacao]||'#2B2FA8';
-    const icon=L.divIcon({html:`<div style="background:${cor};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b><br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim} (${s.duracao}min)<br>${s.diasSemPedido&&s.diasSemPedido<999?`🕐 ${s.diasSemPedido}d sem pedido`:''}`).addTo(mapaInst);
-    _mapaLayers.push(mk); ll.push([s.lat,s.lon]);
+    const cor=COR[s.classificacao]||'#2B2FA8';
+    const bg=s.rep?'#7c3aed':cor;
+    const icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
+    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}<br>${s.diasSemPedido&&s.diasSemPedido<999?`🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
+    _ml.push(mk);ll.push([s.lat,s.lon]);
   });
-  if(ll.length>1){ const ln=L.polyline(ll,{color:'#2B2FA8',weight:3,opacity:.65,dashArray:'8,5'}).addTo(mapaInst); _mapaLayers.push(ln); }
-  if(ll.length) mapaInst.fitBounds(ll,{padding:[40,40]});
+  if(ll.length>1){const ln=L.polyline(ll,{color:'#2B2FA8',weight:3,opacity:.65,dashArray:'8,5'}).addTo(mapaInst);_ml.push(ln);}
+  if(ll.length)mapaInst.fitBounds(ll,{padding:[40,40]});
 }
 
-// ── AGENDAMENTO ──────────────────────────────────────────────
-function abrirAgendamento(){
-  clienteAgendamento=null;
-  document.getElementById('agCliente').value='';
-  document.getElementById('agLista').style.display='none';
-  document.getElementById('agData').value=ds(diaSel);
-  document.getElementById('agHora').value='10:00';
-  document.getElementById('agDuracao').value='60';
-  document.getElementById('agObs').value='';
-  document.getElementById('ovAgendamento').classList.remove('hidden');
-}
-function fecharAg(){ document.getElementById('ovAgendamento').classList.add('hidden'); }
-function filtrarClientesAg(txt){
-  const lista=document.getElementById('agLista');
-  if(txt.length<2){ lista.style.display='none'; return; }
-  const ms=CLIENTES.filter(c=>c.nome_cliente.toLowerCase().includes(txt.toLowerCase())||c.cod_cliente.includes(txt)).slice(0,8);
-  if(!ms.length){ lista.style.display='none'; return; }
-  lista.innerHTML=ms.map(c=>`<div class="autocomplete-item" onclick="selClienteAg('${c.cod_cliente}_${c.loja}','${c.nome_cliente.replace(/'/g,"&#39;")}','${c.municipio||''}')"><b>${c.nome_cliente}</b> <span style="color:var(--muted);font-size:.75rem">${c.municipio}</span></div>`).join('');
-  lista.style.display='block';
-}
-function selClienteAg(id,nome,municipio){ clienteAgendamento={id,nome,municipio}; document.getElementById('agCliente').value=nome; document.getElementById('agLista').style.display='none'; }
-function salvarAg(){
-  if(!clienteAgendamento){ alert('Selecione um cliente da lista.'); return; }
-  agendamentos.push({clienteId:clienteAgendamento.id,nomeCliente:clienteAgendamento.nome,municipio:clienteAgendamento.municipio,data:document.getElementById('agData').value,hora:document.getElementById('agHora').value,duracao:parseInt(document.getElementById('agDuracao').value),obs:document.getElementById('agObs').value});
-  salvar(); fecharAg(); gerarRoteiro();
-}
+// ── AGENDAMENTO ───────────────────────────────────────────────
+function abrirAgendamento(){clienteAgendamento=null;document.getElementById('agCliente').value='';document.getElementById('agLista').style.display='none';document.getElementById('agData').value=ds(diaSel);document.getElementById('agHora').value='10:00';document.getElementById('agDuracao').value='60';document.getElementById('agObs').value='';document.getElementById('ovAgendamento').classList.remove('hidden');}
+function fecharAg(){document.getElementById('ovAgendamento').classList.add('hidden');}
+function filtrarClientesAg(txt){const lista=document.getElementById('agLista');if(txt.length<2){lista.style.display='none';return;}const ms=CLIENTES.filter(c=>c.nome_cliente.toLowerCase().includes(txt.toLowerCase())||c.cod_cliente.includes(txt)).slice(0,8);if(!ms.length){lista.style.display='none';return;}lista.innerHTML=ms.map(c=>`<div class="autocomplete-item" onclick="selClienteAg('${c.cod_cliente}_${c.loja}','${c.nome_cliente.replace(/'/g,"&#39;")}','${c.municipio||''}')"><b>${c.nome_cliente}</b> <span style="color:var(--muted);font-size:.75rem">${c.municipio}</span></div>`).join('');lista.style.display='block';}
+function selClienteAg(id,nome,municipio){clienteAgendamento={id,nome,municipio};document.getElementById('agCliente').value=nome;document.getElementById('agLista').style.display='none';}
+function salvarAg(){if(!clienteAgendamento){alert('Selecione um cliente da lista.');return;}agendamentos.push({clienteId:clienteAgendamento.id,nomeCliente:clienteAgendamento.nome,municipio:clienteAgendamento.municipio,data:document.getElementById('agData').value,hora:document.getElementById('agHora').value,duracao:parseInt(document.getElementById('agDuracao').value),obs:document.getElementById('agObs').value});salvar();fecharAg();gerarRoteiro();}
 
-// ── SENHA ────────────────────────────────────────────────────
-function pedirSenha(){ document.getElementById('senhaInput').value=''; document.getElementById('senhaErr').style.display='none'; document.getElementById('senhaOv').classList.add('show'); setTimeout(()=>document.getElementById('senhaInput').focus(),100); }
-async function confirmarRoteiro(){
-  const h=await sha256(document.getElementById('senhaInput').value);
-  if(h!==hashSenha){ document.getElementById('senhaErr').style.display='block'; return; }
-  document.getElementById('senhaOv').classList.remove('show');
-  document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>Gerando roteiro...</p></div>';
-  setTimeout(()=>gerarRoteiro(),80);
-}
-document.getElementById('senhaInput').addEventListener('keydown',e=>{ if(e.key==='Enter') confirmarRoteiro(); });
+// ── SENHA ─────────────────────────────────────────────────────
+function pedirSenha(){document.getElementById('senhaInput').value='';document.getElementById('senhaErr').style.display='none';document.getElementById('senhaOv').classList.add('show');setTimeout(()=>document.getElementById('senhaInput').focus(),100);}
+async function confirmarRoteiro(){const h=await sha256(document.getElementById('senhaInput').value);if(h!==hashSenha){document.getElementById('senhaErr').style.display='block';return;}document.getElementById('senhaOv').classList.remove('show');document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>Gerando roteiro...</p></div>';setTimeout(()=>gerarRoteiro(),80);}
+document.getElementById('senhaInput').addEventListener('keydown',e=>{if(e.key==='Enter')confirmarRoteiro();});
 
-// ── TABS ─────────────────────────────────────────────────────
-function setView(v){
-  viewAtual=v;
-  ['dia','semana','mes','resumo'].forEach(x=>{
-    document.getElementById('view'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('hidden',x!==v);
-    document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('ativo',x===v);
-  });
-  renderViewAtual();
-}
-function mudarMes(d){ mesSel.setMonth(mesSel.getMonth()+d); mesSel.setDate(1); carregarEstado(); renderTudo(); selecionarDia(diaSel); }
+function setView(v){viewAtual=v;['dia','semana','mes','resumo'].forEach(x=>{document.getElementById('view'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('hidden',x!==v);document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('ativo',x===v);});renderViewAtual();}
+function mudarMes(d){mesSel.setMonth(mesSel.getMonth()+d);mesSel.setDate(1);carregarEstado();renderTudo();selecionarDia(diaSel);}
 
 init();
 </script>
