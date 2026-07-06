@@ -114,6 +114,8 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .tag-rep{background:#fdf4ff;color:#7c3aed;border:1px solid #d8b4fe;}
 [data-theme="dark"] .tag-rep{background:#2e1065;color:#c4b5fd;}
 .tag-urgente{background:var(--vermelho-bg);color:var(--vermelho);}
+.tag-central{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
+[data-theme="dark"] .tag-central{background:#1e3a5f;color:#93c5fd;}
 
 /* Badge dias sem pedido */
 .dsped{display:flex;flex-direction:column;align-items:center;min-width:44px;}
@@ -486,11 +488,26 @@ function gerarRoteiro(){
   if(!futuros.length||!CLIENTES.length){roteiro=novoRot;salvar();renderTudo();return;}
 
   // Pool com geo válida
-  const geo=CLIENTES.filter(c=>{
+  const geoRaw=CLIENTES.filter(c=>{
     const lat=+c.latitude, lon=+c.longitude;
     return !isNaN(lat)&&!isNaN(lon)&&Math.abs(lat)>0.01&&Math.abs(lon)>0.01;
   });
-  if(!geo.length){roteiro=novoRot;salvar();renderTudo();return;}
+  if(!geoRaw.length){roteiro=novoRot;salvar();renderTudo();return;}
+
+  // Deduplica clientes rede/centralizados:
+  // Mesmo CNPJ em várias lojas = compra centralizada = visita uma só vez (loja de menor número).
+  // CNPJ diferente por loja = faturado loja a loja = visita todas.
+  const cnpjCount={};
+  geoRaw.forEach(c=>{if(c.cnpj)cnpjCount[c.cnpj]=(cnpjCount[c.cnpj]||0)+1;});
+  const cnpjJaVisto=new Set();
+  const geo=geoRaw.filter(c=>{
+    if(!c.cnpj||cnpjCount[c.cnpj]<=1) return true; // sem CNPJ ou único → inclui normalmente
+    if(cnpjJaVisto.has(c.cnpj)) return false;        // centralizado já incluído → descarta
+    cnpjJaVisto.add(c.cnpj);
+    return true; // primeiro registro do CNPJ centralizado → inclui (loja mais baixa, pois query ordena por FAT DESC, mas centralizados tendem a vir primeiro)
+  });
+  // Marca os centralizados para mostrar badge no card
+  geo.forEach(c=>{c._centralizado=c.cnpj&&cnpjCount[c.cnpj]>1;});
 
   const nDias=futuros.length;
   const MIN=CFG.minPorDia, MAX=CFG.maxPorDia;
@@ -655,7 +672,7 @@ function gerarRoteiro(){
         lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,
         fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,
         diasSemPedido:diasSemPedido(c),rep:c._rep||false,
-        scoreRep:scoreRep(c)
+        scoreRep:scoreRep(c),centralizado:c._centralizado||false
       });
       cur+=dur;
       locAt={latitude:c.latitude,longitude:c.longitude};
@@ -842,6 +859,7 @@ function renderDia(date){
     if(s.tipo==='visita'){
       if(s.classificacao) tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
       if(s.rep) tags+=`<span class="tag tag-rep">↩ Revisita</span>`;
+      if(s.centralizado) tags+=`<span class="tag tag-central" title="Compra centralizada — visita única">🏢 Centralizado</span>`;
       if(s.municipio) sub+=`<span>📍 ${s.municipio}</span>`;
       if(s.fat12m) sub+=`<span>R$ ${(s.fat12m/1000).toFixed(0)}k/ano · ${Math.round(s.fat12m/12/100)/10}k/mês</span>`;
       if(s.mix) sub+=`<span>${s.mix} SKUs</span>`;
