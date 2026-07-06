@@ -374,7 +374,7 @@ const CFG = {
   almoco: {ini:11*60+30, fim:13*60+30}, almocoMin: 60,
   velKmH: 35, parking: 8,
   merch: 15, pros: 45,
-  metaVis: 100, metaH: 100, metaProsp: 2,
+  metaVis: 100, metaH: 100, metaProsp: 2, maxProsp: 4,
   minPorDia: 5, maxPorDia: 8,
   maxAporDia: 2,
   tempoClasse: {A:90, B:60, C:45, '':30},
@@ -647,15 +647,69 @@ function gerarRoteiro(){
       slots.splice(pos,0,{tipo:'almoco',nome:'Almoço',horaIni:m2h(am),horaFim:m2h(am+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
     }
 
-    // Prospecção se sobrar tempo
-    const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
-    if(ultimaVis&&h2m(ultimaVis.horaFim)+CFG.pros<=CFG.horaFim){
-      const lastFim=h2m(ultimaVis.horaFim);
-      slots.push({tipo:'prospeccao',nome:'Prospecção — novo cliente',horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:slots.filter(s=>s.municipio).slice(-1)[0]?.municipio||''});
-    }
-
     novoRot[data]=slots;
   });
+
+  // ── SEGUNDA PASSAGEM: garante 100 visitas de clientes ──────
+  // As prospecções NÃO contam para a meta. Conta apenas tipo='visita'.
+  // Se ainda abaixo de 100, percorre os dias com tempo sobrando e
+  // insere o cliente mais próximo do último ponto (revisita se necessário).
+  let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
+  let passExtra=0;
+  while(totalVis<CFG.metaVis&&passExtra<6){
+    passExtra++;
+    let inseriu=false;
+    for(const data of futuros){
+      if(totalVis>=CFG.metaVis) break;
+      const slots=novoRot[data];
+      if(!slots) continue;
+      const visHoje=slots.filter(s=>s.tipo==='visita').length;
+      if(visHoje>=CFG.maxPorDia) continue; // dia cheio
+
+      // Encontra último ponto de visita do dia para saber a hora e local livre
+      const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
+      if(!ultimaVis) continue;
+      let curFim=h2m(ultimaVis.horaFim);
+      const locAtExtra={latitude:ultimaVis.lat?String(ultimaVis.lat):centro.latitude,longitude:ultimaVis.lon?String(ultimaVis.lon):centro.longitude};
+
+      // Tenta encaixar o cliente mais próximo que caiba no tempo
+      for(const c of rankRep){
+        const travel=travelMin(locAtExtra,{latitude:c.latitude,longitude:c.longitude});
+        const dur=duracaoCliente(c);
+        if(curFim+travel+dur<=CFG.horaFim-5){
+          curFim+=travel;
+          slots.push({
+            tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,
+            horaIni:m2h(curFim),horaFim:m2h(curFim+dur),duracao:dur,
+            classificacao:c.classificacao,
+            lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,
+            fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,
+            diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)
+          });
+          totalVis++;
+          inseriu=true;
+          break;
+        }
+      }
+    }
+    if(!inseriu) break; // não consegue mais encaixar — carteira pequena demais
+  }
+
+  // ── PROSPECÇÃO: máx 4, só em dias que sobra tempo ──────────
+  // Conta separado das visitas de clientes (não entra na meta de 100)
+  let prosContador=0;
+  for(const data of futuros){
+    if(prosContador>=CFG.maxProsp) break;
+    const slots=novoRot[data];
+    if(!slots) continue;
+    const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
+    if(!ultimaVis) continue;
+    const lastFim=h2m(ultimaVis.horaFim);
+    if(lastFim+CFG.pros<=CFG.horaFim-5){
+      slots.push({tipo:'prospeccao',nome:'Prospecção — novo cliente',horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:slots.filter(s=>s.municipio).slice(-1)[0]?.municipio||''});
+      prosContador++;
+    }
+  }
 
   roteiro=novoRot;
   salvar();
