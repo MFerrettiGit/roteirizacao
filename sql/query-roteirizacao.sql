@@ -39,6 +39,7 @@ SELECT
     LTRIM(RTRIM(SA1.A1_ZZLAT))                                          AS latitude,
     LTRIM(RTRIM(SA1.A1_ZZLONG))                                         AS longitude,
     ISNULL(LTRIM(RTRIM(SA1.A1_CLASVEN)), '')                         AS classificacao,
+    ISNULL(LTRIM(RTRIM(SA1.A1_TIPO)),   '')                         AS tipo_cliente,
     ISNULL(V.FAT_12M,     0)                                         AS fat_12m,
     ISNULL(V.MIX_PRODUTOS, 0)                                        AS mix_produtos,
     ISNULL(V.QTD_PEDIDOS,  0)                                        AS qtd_pedidos,

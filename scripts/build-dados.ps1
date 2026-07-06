@@ -106,6 +106,7 @@ foreach ($row in $rows) {
         latitude      = $lat
         longitude     = $lon
         classificacao = $row["classificacao"].ToString().Trim()
+        tipo_cliente  = $row["tipo_cliente"].ToString().Trim()
         fat_12m       = [math]::Round($fat, 2)
         mix_produtos  = $mix
         qtd_pedidos   = $ped

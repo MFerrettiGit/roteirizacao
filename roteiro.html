@@ -418,7 +418,38 @@ function h2m(s){const[h,m]=s.split(':').map(Number);return h*60+(m||0);}
 function haversine(la1,lo1,la2,lo2){const R=6371,d1=(la2-la1)*Math.PI/180,d2=(lo2-lo1)*Math.PI/180;const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function distKm(a,b){if(!a||!b)return 0;return haversine(+(a.latitude||a.lat),+(a.longitude||a.lon),+(b.latitude||b.lat),+(b.longitude||b.lon));}
 function travelMin(a,b){return Math.round(distKm(a,b)/CFG.velKmH*60)+CFG.parking;}
-function duracaoCliente(c){let t=CFG.tempoClasse[c.classificacao||'']||30;if((c.mix_produtos||0)>10)t+=15;return Math.min(t,120);}
+function duracaoCliente(c){
+  // Duração baseada no perfil individual do cliente, não na curva A/B/C.
+  // Quanto este cliente específico merece de atenção?
+  const fatM=(c.fat_12m||0)/12;
+  const mix=c.mix_produtos||0;
+  const dias=diasSemPedido(c);
+
+  // Base mínima
+  let t=30;
+
+  // Faturamento mensal: clientes que movimentam mais exigem mais tempo de negociação
+  if(fatM>15000) t+=40;
+  else if(fatM>8000) t+=30;
+  else if(fatM>3000) t+=20;
+  else if(fatM>800)  t+=12;
+  else if(fatM>200)  t+=5;
+
+  // Mix baixo = oportunidade de ampliação de portfólio = mais tempo de apresentação
+  if(mix>0&&mix<4)       t+=15;
+  else if(mix>=4&&mix<8) t+=8;
+  else if(mix>=8&&mix<15)t+=3;
+  // mix alto (>=15) = visita de manutenção, sem incremento
+
+  // Tempo sem pedido: clientes que sumiram precisam mais atenção e reconquista
+  if(dias>120)     t+=15;
+  else if(dias>90) t+=12;
+  else if(dias>60) t+=8;
+  else if(dias>30) t+=4;
+
+  // Arredonda para múltiplos de 15 min; mínimo 30, máximo 120
+  return Math.max(30,Math.min(120,Math.round(t/15)*15));
+}
 function diasUteis(ano,mes){const d=new Date(ano,mes,1),r=[];while(d.getMonth()===mes){if(isUtil(d))r.push(ds(new Date(d)));d.setDate(d.getDate()+1);}return r;}
 function nomeDataLongo(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});}
 function diasSemPedido(c){if(!c.ult_pedido)return 999;return Math.round((new Date()-new Date(c.ult_pedido+'T12:00:00'))/86400000);}
