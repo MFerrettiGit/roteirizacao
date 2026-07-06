@@ -1,0 +1,29 @@
+﻿2026-07-06 15:25:17  === Iniciando build-dados ===
+2026-07-06 15:25:17  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-06 15:25:18  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-06 15:25:18  ERRO na query: Exceção ao chamar "Fill" com "1" argumento(s): "An error occurred while preparing the query "SELECT codcli, lojacli, idusuario, dtinicio
+         FROM recagenda
+         WHERE status IN ('F','R')
+           AND dtinicio >= DATEADD(MONTH,-12,GETDATE())" for execution against OLE DB provider "MSDASQL" for linked server "TIMESERVICE". "
+2026-07-06 15:25:56  === Iniciando build-dados ===
+2026-07-06 15:25:56  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-06 15:25:56  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-06 15:25:56  ERRO na query: Exceção ao chamar "Fill" com "1" argumento(s): "An error occurred while preparing the query "SELECT codcli, lojacli, idusuario, dtinicio
+         FROM recagenda
+         WHERE status IN ('F','R')" for execution against OLE DB provider "MSDASQL" for linked server "TIMESERVICE". "
+2026-07-06 15:26:30  === Iniciando build-dados ===
+2026-07-06 15:26:30  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-06 15:26:30  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-06 15:26:30  ERRO na query: Exceção ao chamar "Fill" com "1" argumento(s): "Invalid column name 'ZZLAT'.
+Invalid column name 'ZZLAT'.
+Invalid column name 'ZZLONG'.
+Invalid column name 'ZZLONG'.
+Invalid column name 'ZZLAT'.
+Invalid column name 'ZZLONG'."
+2026-07-06 15:26:48  === Iniciando build-dados ===
+2026-07-06 15:26:48  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-06 15:26:48  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-06 15:26:51  Query retornou 13311 registros.
+2026-07-06 15:26:54  Vendedores: 36 | Clientes com geo: 13311
+2026-07-06 15:26:56  clientes.js gerado (13311 clientes, 36 vendedores)
+2026-07-06 15:26:56  === build-dados concluÃ­do ===
