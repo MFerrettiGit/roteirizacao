@@ -808,13 +808,15 @@ function gerarRoteiro(){
     if(slots.filter(s=>s.tipo==='visita').length>=limiteDia)return false;
     const pontos=melhorEncaixe(slots);
     if(!pontos)return false;
+    // IDs já presentes no dia (evita revisitar o mesmo cliente duas vezes)
+    const idsNoDia=new Set(slots.filter(s=>s.clienteId).map(s=>s.clienteId));
     // Município dominante do dia (para preferir revisitas da mesma cidade)
     const visSlots=slots.filter(s=>s.municipio&&s.tipo==='visita');
     const cntMun={};
     visSlots.forEach(s=>{const m=(s.municipio||'').trim().toUpperCase();cntMun[m]=(cntMun[m]||0)+1;});
     const munDia=Object.entries(cntMun).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     for(const {curFim:cf,loc} of pontos){
-      const porDist=[...rankRep].sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
+      const porDist=[...rankRep].filter(c=>!idsNoDia.has(c.cod_cliente+'_'+c.loja)).sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
       // Prioridade: mesma cidade → outras cidades
       const candidatos=munDia
         ?[...porDist.filter(c=>(c.municipio||'').trim().toUpperCase()===munDia),
@@ -847,8 +849,9 @@ function gerarRoteiro(){
         if(!slots)continue;
         const nVis=slots.filter(s=>s.tipo==='visita').length;
         if(nVis>=MIN)continue;
-        // Dia singleton com ≥ 3 visitas: não força mais — prospecção preenche o tempo
-        if(ehDiaSingleton(slots)&&nVis>=3)continue;
+        // Dia singleton com prospecção já inserida: não força mais revisitas além de nVis≥3
+        const temProsp=slots.some(s=>s.tipo==='prospeccao');
+        if(ehDiaSingleton(slots)&&(nVis>=3||(temProsp&&nVis>=2)))continue;
         if(tentaInserir(slots,CFG.maxPorDia)){totalVis++;avancou=true;}
       }
     }
