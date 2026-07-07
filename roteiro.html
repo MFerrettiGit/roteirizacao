@@ -736,10 +736,11 @@ function gerarRoteiro(){
     novoRot[data]=slots;
   });
 
-  // ── Segunda passagem: garante meta de 100 visitas (obrigatório) ─
-  // Prospecção NUNCA conta como visita — contador usa somente tipo==='visita'.
-  // Limite de 8/dia é RÍGIDO: 22 dias úteis × 8 = 176 slots, meta = 100 → sempre alcançável.
-  // Busca o melhor ponto de encaixe: fim da última visita OU logo após o almoço.
+  // ── Segunda passagem: garante mínimo/dia e meta de 100 ──────────
+  // Regras:
+  //   1. Nenhum dia pode ter < MIN (5) visitas — prioridade absoluta, sem exceção.
+  //   2. Revisitas extras (para meta 100) vão para os ÚLTIMOS dias do mês primeiro.
+  // Prospecção NUNCA conta como visita.
   function melhorEncaixe(slots){
     const visitas=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
     if(!visitas.length)return null;
@@ -749,33 +750,47 @@ function gerarRoteiro(){
     if(almoco){const fim=h2m(almoco.horaFim);if(fim<h2m(ultima.horaIni))pontos.push({curFim:fim,loc:{latitude:String(centro.lat),longitude:String(centro.lon)}});}
     return pontos;
   }
+  function tentaInserir(slots,limiteDia){
+    if(slots.filter(s=>s.tipo==='visita').length>=limiteDia)return false;
+    const pontos=melhorEncaixe(slots);
+    if(!pontos)return false;
+    for(const {curFim:cf,loc} of pontos){
+      const candidatos=[...rankRep].sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
+      for(const c of candidatos){
+        const travel=travelMin(loc,{latitude:c.latitude,longitude:c.longitude});
+        const dur=duracaoCliente(c);
+        if(cf+travel+dur<=CFG.horaFim){
+          slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(cf+travel),horaFim:m2h(cf+travel+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
+          return true;
+        }
+      }
+    }
+    return false;
+  }
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  // Apenas uma passagem com o limite rígido de maxPorDia (8) — não há necessidade de relaxar
+  // PASSO A: corrige dias com < MIN visitas (iteração NORMAL — qualquer dia carente)
+  {
+    let avancou=true;
+    while(avancou){
+      avancou=false;
+      for(const data of futuros){
+        const slots=novoRot[data];
+        if(!slots)continue;
+        if(slots.filter(s=>s.tipo==='visita').length>=MIN)continue;
+        if(tentaInserir(slots,CFG.maxPorDia)){totalVis++;avancou=true;}
+      }
+    }
+  }
+  // PASSO B: completa meta 100 — revisitas vão para os ÚLTIMOS dias primeiro
   {
     let avancou=true;
     while(totalVis<CFG.metaVis && avancou){
       avancou=false;
-      for(const data of futuros){
+      for(const data of [...futuros].reverse()){
         if(totalVis>=CFG.metaVis)break;
         const slots=novoRot[data];
         if(!slots)continue;
-        if(slots.filter(s=>s.tipo==='visita').length>=CFG.maxPorDia)continue;
-        const pontos=melhorEncaixe(slots);
-        if(!pontos)continue;
-        let inseriu=false;
-        for(const {curFim:cf,loc} of pontos){
-          if(inseriu)break;
-          const candidatos=[...rankRep].sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
-          for(const c of candidatos){
-            const travel=travelMin(loc,{latitude:c.latitude,longitude:c.longitude});
-            const dur=duracaoCliente(c);
-            if(cf+travel+dur<=CFG.horaFim){
-              const ini=cf+travel;
-              slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(ini),horaFim:m2h(ini+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
-              totalVis++; avancou=true; inseriu=true; break;
-            }
-          }
-        }
+        if(tentaInserir(slots,CFG.maxPorDia)){totalVis++;avancou=true;}
       }
     }
   }
