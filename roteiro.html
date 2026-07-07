@@ -1198,6 +1198,9 @@ function renderMapa(){
   slots.forEach((s,i)=>{
     if(!s.lat&&!s.lon)return;
     let icon;
+    // lat/lon usados para o marker (prospecção fica levemente deslocada para não sobrepor o cliente)
+    const mlat=s.tipo==='prospeccao'?s.lat+0.008:s.lat;
+    const mlon=s.tipo==='prospeccao'?s.lon+0.008:s.lon;
     if(s.tipo==='prospeccao'){
       icon=L.divIcon({html:`<div style="background:#059669;color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">🌱</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
     } else {
@@ -1205,8 +1208,8 @@ function renderMapa(){
       const bg=s.rep?'#7c3aed':cor;
       icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
     }
-    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
-    _ml.push(mk);ll.push([s.lat,s.lon]);
+    const mk=L.marker([mlat,mlon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
+    _ml.push(mk);ll.push([mlat,mlon]);
   });
   // Ponto de partida/chegada (casa do vendedor)
   const vHome=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
