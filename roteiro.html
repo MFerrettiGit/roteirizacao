@@ -719,33 +719,35 @@ function gerarRoteiro(){
     novoRot[data]=slots;
   });
 
-  // ── Segunda passagem: garante meta de 100 visitas ────────────
+  // ── Segunda passagem: garante meta de 100 visitas (obrigatório) ─
+  // Tenta inserir visitas progressivamente, relaxando o limite diário se necessário.
+  // maxPorDia é o ideal, mas não pode ser empecilho para atingir a meta.
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  let passExtra=0;
-  while(totalVis<CFG.metaVis&&passExtra<10){
-    passExtra++;
-    let inseriu=false;
-    for(const data of futuros){
-      if(totalVis>=CFG.metaVis)break;
-      const slots=novoRot[data];
-      if(!slots)continue;
-      if(slots.filter(s=>s.tipo==='visita').length>=CFG.maxPorDia)continue;
-      const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
-      if(!ultimaVis)continue;
-      let curFim=h2m(ultimaVis.horaFim);
-      const locAtExtra={latitude:ultimaVis.lat?String(ultimaVis.lat):String(centro.lat),longitude:ultimaVis.lon?String(ultimaVis.lon):String(centro.lon)};
-      const candidatos=[...rankRep].sort((a,b)=>travelMin(locAtExtra,{latitude:a.latitude,longitude:a.longitude})-travelMin(locAtExtra,{latitude:b.latitude,longitude:b.longitude}));
-      for(const c of candidatos){
-        const travel=travelMin(locAtExtra,{latitude:c.latitude,longitude:c.longitude});
-        const dur=duracaoCliente(c);
-        if(curFim+travel+dur<=CFG.horaFim){
-          curFim+=travel;
-          slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(curFim),horaFim:m2h(curFim+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
-          totalVis++; inseriu=true; break;
+  for(let limDia=CFG.maxPorDia; limDia<=CFG.maxPorDia+4 && totalVis<CFG.metaVis; limDia++){
+    let avancou=true;
+    while(totalVis<CFG.metaVis && avancou){
+      avancou=false;
+      for(const data of futuros){
+        if(totalVis>=CFG.metaVis)break;
+        const slots=novoRot[data];
+        if(!slots)continue;
+        if(slots.filter(s=>s.tipo==='visita').length>=limDia)continue;
+        const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
+        if(!ultimaVis)continue;
+        let curFim=h2m(ultimaVis.horaFim);
+        const locAtExtra={latitude:ultimaVis.lat?String(ultimaVis.lat):String(centro.lat),longitude:ultimaVis.lon?String(ultimaVis.lon):String(centro.lon)};
+        const candidatos=[...rankRep].sort((a,b)=>travelMin(locAtExtra,{latitude:a.latitude,longitude:a.longitude})-travelMin(locAtExtra,{latitude:b.latitude,longitude:b.longitude}));
+        for(const c of candidatos){
+          const travel=travelMin(locAtExtra,{latitude:c.latitude,longitude:c.longitude});
+          const dur=duracaoCliente(c);
+          if(curFim+travel+dur<=CFG.horaFim){
+            curFim+=travel;
+            slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(curFim),horaFim:m2h(curFim+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
+            totalVis++; avancou=true; break;
+          }
         }
       }
     }
-    if(!inseriu)break;
   }
 
   // ── Prospecção: máx 4, só onde sobra tempo ───────────────────
