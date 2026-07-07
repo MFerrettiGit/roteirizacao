@@ -380,7 +380,7 @@ const CFG = {
   horaIni: 8*60, horaFim: 17*60+48,
   almoco: {ini:11*60+30, fim:13*60+30}, almocoMin: 60,
   velKmH: 35, parking: 8,
-  merch: 15, pros: 45,
+  pros: 45,
   metaVis: 100, metaH: 100, metaProsp: 2, maxProsp: 4,
   minPorDia: 5, maxPorDia: 8,
   maxAporDia: 2,
@@ -661,15 +661,7 @@ function gerarRoteiro(){
     const clientesOrdenados=nnSort(gruposUnicos[di],centro.lat,centro.lon);
 
     const slots=[];
-    let cur=CFG.horaIni, almOk=false;
-
-    slots.push({tipo:'merchandising',nome:'Merchandising',horaIni:m2h(cur),horaFim:m2h(cur+CFG.merch),duracao:CFG.merch,classificacao:''});
-    cur+=CFG.merch;
-
-    if(clientesOrdenados.length){
-      const tCasa=Math.min(40,travelMin(centro,{latitude:clientesOrdenados[0].latitude,longitude:clientesOrdenados[0].longitude}));
-      cur+=tCasa;
-    }
+    let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
 
     function insertAlmoco(){
       if(!almOk&&cur>=CFG.almoco.ini&&cur<CFG.almoco.fim+60){
@@ -718,32 +710,28 @@ function gerarRoteiro(){
 
     if(!almOk){
       const pos=Math.max(1,slots.findIndex(s=>s.tipo==='visita')+1);
-      const am=Math.min(CFG.almoco.fim,Math.max(CFG.almoco.ini,CFG.horaIni+CFG.merch+60));
+      const am=Math.min(CFG.almoco.fim,Math.max(CFG.almoco.ini,CFG.horaIni+60));
       slots.splice(pos,0,{tipo:'almoco',nome:'Almoço',horaIni:m2h(am),horaFim:m2h(am+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
     }
     novoRot[data]=slots;
   });
 
   // ── Segunda passagem: garante meta de 100 visitas (obrigatório) ─
-  // Prospecção NUNCA conta como visita — o contador usa somente tipo==='visita'.
-  // Se o dia está cheio no limite ideal, relaxa progressivamente maxPorDia+1..+4.
-  // Dentro de cada tentativa, busca o melhor ponto de encaixe no dia:
-  //   a) após a última visita (mais comum)
-  //   b) após o almoço se o período da tarde ainda tem espaço
+  // Prospecção NUNCA conta como visita — contador usa somente tipo==='visita'.
+  // Limite de 8/dia é RÍGIDO: 22 dias úteis × 8 = 176 slots, meta = 100 → sempre alcançável.
+  // Busca o melhor ponto de encaixe: fim da última visita OU logo após o almoço.
   function melhorEncaixe(slots){
-    // Retorna {curFim, locAt} do melhor ponto para adicionar uma visita no dia.
-    // Testa: fim da última visita, e após o almoço se for mais cedo.
     const visitas=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
     if(!visitas.length)return null;
     const ultima=visitas[visitas.length-1];
     const pontos=[{curFim:h2m(ultima.horaFim),loc:{latitude:ultima.lat?String(ultima.lat):String(centro.lat),longitude:ultima.lon?String(ultima.lon):String(centro.lon)}}];
-    // Tenta também logo após o almoço (se a tarde ficou vazia)
     const almoco=slots.find(s=>s.tipo==='almoco');
     if(almoco){const fim=h2m(almoco.horaFim);if(fim<h2m(ultima.horaIni))pontos.push({curFim:fim,loc:{latitude:String(centro.lat),longitude:String(centro.lon)}});}
     return pontos;
   }
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  for(let limDia=CFG.maxPorDia; limDia<=CFG.maxPorDia+4 && totalVis<CFG.metaVis; limDia++){
+  // Apenas uma passagem com o limite rígido de maxPorDia (8) — não há necessidade de relaxar
+  {
     let avancou=true;
     while(totalVis<CFG.metaVis && avancou){
       avancou=false;
@@ -751,7 +739,7 @@ function gerarRoteiro(){
         if(totalVis>=CFG.metaVis)break;
         const slots=novoRot[data];
         if(!slots)continue;
-        if(slots.filter(s=>s.tipo==='visita').length>=limDia)continue;
+        if(slots.filter(s=>s.tipo==='visita').length>=CFG.maxPorDia)continue;
         const pontos=melhorEncaixe(slots);
         if(!pontos)continue;
         let inseriu=false;
@@ -878,7 +866,7 @@ function renderDia(date){
   let h='';
   slots.forEach(s=>{
     const corSide=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'var(--cinza)'}[s.classificacao]||'var(--cinza)')
-      :s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)':s.tipo==='merchandising'?'var(--roxo)':'var(--cinza)';
+      :s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)':'var(--cinza)';
 
     let tags='',sub='',badge='';
     if(s.tipo==='visita'){
@@ -897,7 +885,6 @@ function renderDia(date){
     }
     if(s.tipo==='agendamento'){tags+=`<span class="tag tag-ag">🔒 Agendado</span>`;if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;}
     if(s.tipo==='prospeccao'){tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;}
-    if(s.tipo==='merchandising'){tags+=`<span class="tag tag-merch">Merchandising</span>`;}
     if(s.municipio&&s.tipo!=='visita') sub+=`<span>📍 ${s.municipio}</span>`;
 
     h+=`<div class="slot-card tipo-${s.tipo} classe-${s.classificacao||''}">
