@@ -311,6 +311,11 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
     </div>
 
     <div class="content-area hidden" id="viewSemana">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <button class="hbtn" style="background:var(--azul-bg);border-color:var(--border);color:var(--azul)" onclick="mudarSemana(-1)">‹ Anterior</button>
+        <span id="labelSemana" style="flex:1;text-align:center;font-weight:700;font-size:.88rem;color:var(--azul)"></span>
+        <button class="hbtn" style="background:var(--azul-bg);border-color:var(--border);color:var(--azul)" onclick="mudarSemana(1)">Próxima ›</button>
+      </div>
       <div class="semana-wrap" id="semanaGrid"></div>
     </div>
 
@@ -933,8 +938,18 @@ function renderSbDia(){
   </div>`;
 }
 
+function mudarSemana(dir){
+  const ini=semanaIni(diaSel);
+  ini.setDate(ini.getDate()+dir*7);
+  diaSel=new Date(ini);
+  renderSemana();
+}
 function renderSemana(){
   const ini=semanaIni(diaSel),hoje=ds(new Date());
+  const fim=new Date(ini);fim.setDate(fim.getDate()+4);
+  const fmtD=d=>d.toLocaleDateString('pt-BR',{day:'numeric',month:'short'});
+  document.getElementById('labelSemana').textContent=`${fmtD(ini)} – ${fmtD(fim)}`;
+
   let h='';
   for(let i=0;i<5;i++){
     const d=new Date(ini);d.setDate(d.getDate()+i);
