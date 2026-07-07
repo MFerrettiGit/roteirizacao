@@ -3,7 +3,7 @@
 // Chave: valor do parâmetro ?setor= na URL (A3_NREDUZ do ERP)
 window.VENDEDORES_HOME = {
   "RIBEIRÃO PRETO": { nome:"Lopes",       lat:-21.1302153, lon:-47.8288414 },
-  "FRANCA":         { nome:"Luis",         lat:-20.5274596, lon:-47.3991976 },
+  "FRANCA":         { nome:"Luis",         lat:-20.5282, lon:-47.3995 },
   "ITAPETININGA":   { nome:"Nelson",       lat:-23.5919002, lon:-48.0537234 },
   "PIRACICABA":     { nome:"Cominatto",    lat:-22.6779298, lon:-47.6736982 },
   "SÃO CARLOS":     { nome:"Bragatto",     lat:-22.0180395, lon:-47.8911540 },
