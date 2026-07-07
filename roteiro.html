@@ -935,6 +935,71 @@ function gerarRoteiro(){
     prosContador++;
   }
 
+  // PASSO C: reordena visitas de cada dia por nearest-neighbor a partir de casa
+  // Sem isso o algoritmo empilha clientes na ordem de inserção, gerando rotas em zigue-zague.
+  {
+    const vHome=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
+    for(const data of futuros){
+      const slots=novoRot[data];
+      if(!slots||slots.length<2)continue;
+
+      // Separa slots fixos (almoço, prospecção) das visitas reordenáveis
+      const visitas=slots.filter(s=>(s.tipo==='visita'||s.tipo==='agendamento')&&s.lat&&s.lon);
+      if(visitas.length<2)continue;
+
+      // Nearest-neighbor a partir de casa (ou primeiro cliente se sem home)
+      const startLat=vHome?vHome.lat:+visitas[0].lat;
+      const startLon=vHome?vHome.lon:+visitas[0].lon;
+      const pool=[...visitas];
+      const ordered=[];
+      let curLat=startLat, curLon=startLon;
+      while(pool.length){
+        let bestIdx=0, bestDist=Infinity;
+        pool.forEach((v,i)=>{
+          const d=haversine(curLat,curLon,+v.lat,+v.lon);
+          if(d<bestDist){bestDist=d;bestIdx=i;}
+        });
+        const chosen=pool.splice(bestIdx,1)[0];
+        ordered.push(chosen);
+        curLat=+chosen.lat; curLon=+chosen.lon;
+      }
+
+      // Reconstrói os slots do dia com tempos recalculados
+      // Agendamentos fixos mantêm seu horário original; visitas recebem novo horaIni/horaFim
+      const newSlots=[];
+      let cur=CFG.horaIni;
+      let almOk=slots.some(s=>s.tipo==='almoco'); // já tem almoço?
+      let prevLat=startLat, prevLon=startLon;
+
+      ordered.forEach((v,i)=>{
+        const travel=i===0?travelMin({lat:startLat,lon:startLon},{lat:+v.lat,lon:+v.lon})
+                          :travelMin({lat:prevLat,lon:prevLon},{lat:+v.lat,lon:+v.lon});
+        cur+=travel;
+        // Inserir almoço antes se caiu no intervalo
+        if(!almOk&&cur>=CFG.almoco.ini){
+          const ini=Math.max(CFG.almoco.ini,cur);
+          newSlots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(ini),horaFim:m2h(ini+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
+          almOk=true; cur=ini+CFG.almocoMin;
+        }
+        if(cur>=CFG.horaFim)cur=CFG.horaFim-v.duracao; // não deixar passar do expediente
+        v.horaIni=m2h(cur);
+        v.horaFim=m2h(cur+v.duracao);
+        newSlots.push(v);
+        prevLat=+v.lat; prevLon=+v.lon;
+        cur+=v.duracao;
+      });
+
+      // Prospecções vão depois da última visita
+      slots.filter(s=>s.tipo==='prospeccao').forEach(s=>{
+        s.horaIni=m2h(cur); s.horaFim=m2h(cur+s.duracao); cur+=s.duracao;
+        newSlots.push(s);
+      });
+
+      slots.length=0;
+      newSlots.forEach(s=>slots.push(s));
+    }
+  }
+
   roteiro=novoRot;
   salvar();
   renderTudo();
