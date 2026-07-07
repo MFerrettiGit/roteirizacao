@@ -662,11 +662,22 @@ function gerarRoteiro(){
   const usadosNaClusters=new Set(
     gruposUnicos.flatMap(g=>g.filter(c=>!c._rep).map(c=>c.cod_cliente+'_'+c.loja))
   );
+  // diaOriginalCluster: clienteId → índice do cluster (dia) onde ocorre a visita original
+  // Usado para garantir gap mínimo de 14 dias entre visita e revisita já no PASSO 3
+  const diaOriginalCluster={};
+  gruposUnicos.forEach((g,di)=>g.filter(c=>!c._rep).forEach(c=>{diaOriginalCluster[c.cod_cliente+'_'+c.loja]=di;}));
+  const MIN_GAP_P3=14;
   futuros.forEach((d,di)=>{
     const grupo=gruposUnicos[di];
     while(grupo.length<MIN){
       const cg=centroGrupo(grupo);
-      const candidatos=rankRep.filter(c=>!usadosNaClusters.has(c.cod_cliente+'_'+c.loja));
+      const candidatos=rankRep.filter(c=>{
+        const id=c.cod_cliente+'_'+c.loja;
+        if(usadosNaClusters.has(id))return false;
+        // revisita só no cluster que estiver ≥ 14 dias após a visita original
+        if(diaOriginalCluster[id]!==undefined&&di-diaOriginalCluster[id]<MIN_GAP_P3)return false;
+        return true;
+      });
       if(!candidatos.length)break;
       const top20=candidatos.slice(0,20);
       const best=top20.reduce((b,c)=>haversine(cg.lat,cg.lon,+c.latitude,+c.longitude)<haversine(cg.lat,cg.lon,+b.latitude,+b.longitude)?c:b);
@@ -681,8 +692,14 @@ function gerarRoteiro(){
     let diBest=0;
     futuros.forEach((d,di)=>{if(gruposUnicos[di].length<gruposUnicos[diBest].length&&gruposUnicos[di].length<MAX)diBest=di;});
     if(gruposUnicos[diBest].length>=MAX)break;
-    gruposUnicos[diBest].push({...rankRepDisp[repIdx],_rep:true});
-    repIdx++; totalAtual++;
+    const c=rankRepDisp[repIdx];
+    const id=c.cod_cliente+'_'+c.loja;
+    // Garante gap ≥ 14 dias também neste loop
+    if(diaOriginalCluster[id]===undefined||diBest-diaOriginalCluster[id]>=MIN_GAP_P3){
+      gruposUnicos[diBest].push({...c,_rep:true});
+      totalAtual++;
+    }
+    repIdx++;
   }
 
   // ── PASSO 8: Constrói slots com horários ─────────────────────
@@ -817,6 +834,14 @@ function gerarRoteiro(){
   // Sem isso, PASSO A/B adicionam os mesmos clientes em outros dias (clonagem)
   Object.values(novoRot).forEach(sl=>sl.filter(s=>s.rep&&s.clienteId).forEach(s=>usadosComoRevisita.add(s.clienteId)));
 
+  // diaOriginal: mapa clienteId → índice (0-based) do dia em que ocorre a visita original (não-rep)
+  // Usado para garantir espaçamento mínimo de 14 dias entre visita e revisita
+  const diaOriginal={};
+  futuros.forEach((data,idx)=>{
+    (novoRot[data]||[]).filter(s=>s.clienteId&&!s.rep).forEach(s=>{diaOriginal[s.clienteId]=idx;});
+  });
+  const MIN_GAP_DIAS=14;
+
   function tentaInserir(slots,limiteDia,opts={}){
     if(slots.filter(s=>s.tipo==='visita').length>=limiteDia)return false;
     const pontos=melhorEncaixe(slots);
@@ -833,10 +858,14 @@ function gerarRoteiro(){
     visSlots.forEach(s=>{const m=(s.municipio||'').trim().toUpperCase();cntMun[m]=(cntMun[m]||0)+1;});
     const munDia=Object.entries(cntMun).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     for(const {curFim:cf,loc} of pontos){
+      // índice do dia atual dentro de futuros (para cálculo de gap)
+      const idxDiaAtual=futuros.indexOf(futuros.find(d=>novoRot[d]===slots));
       let pool=[...rankRep].filter(c=>{
         const id=c.cod_cliente+'_'+c.loja;
         if(idsNoDia.has(id))return false;
         if(opts.globalUsed&&opts.globalUsed.has(id))return false; // já revisitado em outro dia
+        // Espaçamento mínimo: revisita só permitida ≥ 14 dias após a visita original
+        if(diaOriginal[id]!==undefined&&idxDiaAtual-diaOriginal[id]<MIN_GAP_DIAS)return false;
         if(maxGeoKm&&cLat!==null){ // restrição geográfica: apenas clientes próximos ao cluster do dia
           const dkm=haversine(cLat,cLon,+c.latitude,+c.longitude);
           if(dkm>maxGeoKm)return false;
