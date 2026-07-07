@@ -657,25 +657,32 @@ function gerarRoteiro(){
     if(!grupo.length)return centro;
     return{lat:grupo.reduce((s,c)=>s+(+c.latitude),0)/grupo.length,lon:grupo.reduce((s,c)=>s+(+c.longitude),0)/grupo.length};
   }
+  // usadosNaClusters: garante que cada cliente vira _rep:true em no máximo 1 cluster
+  // → sem esse rastreio, o mesmo cliente aparece como revisita em múltiplos dias
+  const usadosNaClusters=new Set(
+    gruposUnicos.flatMap(g=>g.filter(c=>!c._rep).map(c=>c.cod_cliente+'_'+c.loja))
+  );
   futuros.forEach((d,di)=>{
     const grupo=gruposUnicos[di];
     while(grupo.length<MIN){
       const cg=centroGrupo(grupo);
-      const candidatos=rankRep.filter(c=>!grupo.some(g=>g.cod_cliente===c.cod_cliente&&g.loja===c.loja));
+      const candidatos=rankRep.filter(c=>!usadosNaClusters.has(c.cod_cliente+'_'+c.loja));
       if(!candidatos.length)break;
       const top20=candidatos.slice(0,20);
       const best=top20.reduce((b,c)=>haversine(cg.lat,cg.lon,+c.latitude,+c.longitude)<haversine(cg.lat,cg.lon,+b.latitude,+b.longitude)?c:b);
+      usadosNaClusters.add(best.cod_cliente+'_'+best.loja);
       grupo.push({...best,_rep:true});
     }
   });
   let totalAtual=gruposUnicos.reduce((s,g)=>s+g.length,0);
-  let repRound=0;
-  while(totalAtual<CFG.metaVis){
+  const rankRepDisp=[...rankRep].filter(c=>!usadosNaClusters.has(c.cod_cliente+'_'+c.loja));
+  let repIdx=0;
+  while(totalAtual<CFG.metaVis&&repIdx<rankRepDisp.length){
     let diBest=0;
     futuros.forEach((d,di)=>{if(gruposUnicos[di].length<gruposUnicos[diBest].length&&gruposUnicos[di].length<MAX)diBest=di;});
     if(gruposUnicos[diBest].length>=MAX)break;
-    gruposUnicos[diBest].push({...rankRep[repRound%rankRep.length],_rep:true});
-    repRound++; totalAtual++;
+    gruposUnicos[diBest].push({...rankRepDisp[repIdx],_rep:true});
+    repIdx++; totalAtual++;
   }
 
   // ── PASSO 8: Constrói slots com horários ─────────────────────
@@ -804,29 +811,51 @@ function gerarRoteiro(){
     if(almoco){const fim=h2m(almoco.horaFim);if(fim<h2m(ultima.horaIni))pontos.push({curFim:fim,loc:{latitude:String(centro.lat),longitude:String(centro.lon)}});}
     return pontos;
   }
-  function tentaInserir(slots,limiteDia){
+  // usadosComoRevisita: impede o mesmo cliente aparecer como revisita em dois dias diferentes
+  const usadosComoRevisita=new Set();
+  // Pré-popula com revisitas já inseridas pelo PASSO 3 nos clusters iniciais (_rep:true → rep:true no PASSO 8)
+  // Sem isso, PASSO A/B adicionam os mesmos clientes em outros dias (clonagem)
+  Object.values(novoRot).forEach(sl=>sl.filter(s=>s.rep&&s.clienteId).forEach(s=>usadosComoRevisita.add(s.clienteId)));
+
+  function tentaInserir(slots,limiteDia,opts={}){
     if(slots.filter(s=>s.tipo==='visita').length>=limiteDia)return false;
     const pontos=melhorEncaixe(slots);
     if(!pontos)return false;
-    // IDs já presentes no dia (evita revisitar o mesmo cliente duas vezes)
+    // IDs já presentes no dia (evita revisitar o mesmo cliente duas vezes no mesmo dia)
     const idsNoDia=new Set(slots.filter(s=>s.clienteId).map(s=>s.clienteId));
-    // Município dominante do dia (para preferir revisitas da mesma cidade)
-    const visSlots=slots.filter(s=>s.municipio&&s.tipo==='visita');
+    // Centróide do dia (para geo-restrição de revisitas)
+    const visSlots=slots.filter(s=>s.tipo==='visita'&&s.lat&&s.lon);
+    const cLat=visSlots.length?visSlots.reduce((s,x)=>s+x.lat,0)/visSlots.length:null;
+    const cLon=visSlots.length?visSlots.reduce((s,x)=>s+x.lon,0)/visSlots.length:null;
+    const maxGeoKm=opts.geoKm||null;
+    // Município dominante do dia
     const cntMun={};
     visSlots.forEach(s=>{const m=(s.municipio||'').trim().toUpperCase();cntMun[m]=(cntMun[m]||0)+1;});
     const munDia=Object.entries(cntMun).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     for(const {curFim:cf,loc} of pontos){
-      const porDist=[...rankRep].filter(c=>!idsNoDia.has(c.cod_cliente+'_'+c.loja)).sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
-      // Prioridade: mesma cidade → outras cidades
+      let pool=[...rankRep].filter(c=>{
+        const id=c.cod_cliente+'_'+c.loja;
+        if(idsNoDia.has(id))return false;
+        if(opts.globalUsed&&opts.globalUsed.has(id))return false; // já revisitado em outro dia
+        if(maxGeoKm&&cLat!==null){ // restrição geográfica: apenas clientes próximos ao cluster do dia
+          const dkm=haversine(cLat,cLon,+c.latitude,+c.longitude);
+          if(dkm>maxGeoKm)return false;
+        }
+        return true;
+      });
+      pool.sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
       const candidatos=munDia
-        ?[...porDist.filter(c=>(c.municipio||'').trim().toUpperCase()===munDia),
-           ...porDist.filter(c=>(c.municipio||'').trim().toUpperCase()!==munDia)]
-        :porDist;
+        ?[...pool.filter(c=>(c.municipio||'').trim().toUpperCase()===munDia),
+           ...pool.filter(c=>(c.municipio||'').trim().toUpperCase()!==munDia)]
+        :pool;
       for(const c of candidatos){
         const travel=travelMin(loc,{latitude:c.latitude,longitude:c.longitude});
         const dur=duracaoCliente(c);
         if(cf+travel+dur<=CFG.horaFim){
-          slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(cf+travel),horaFim:m2h(cf+travel+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
+          const id=c.cod_cliente+'_'+c.loja;
+          slots.push({tipo:'visita',clienteId:id,nome:c.nome_cliente,horaIni:m2h(cf+travel),horaFim:m2h(cf+travel+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
+          idsNoDia.add(id);
+          if(opts.globalUsed)opts.globalUsed.add(id);
           return true;
         }
       }
@@ -852,11 +881,12 @@ function gerarRoteiro(){
         // Dia singleton com prospecção já inserida: não forçar revisitas de outras cidades
         const temProsp=slots.some(s=>s.tipo==='prospeccao');
         if(ehDiaSingleton(slots)&&(nVis>=3||temProsp))continue;
-        if(tentaInserir(slots,CFG.maxPorDia)){totalVis++;avancou=true;}
+        if(tentaInserir(slots,CFG.maxPorDia,{globalUsed:usadosComoRevisita})){totalVis++;avancou=true;}
       }
     }
   }
-  // PASSO B: completa meta 100 — revisitas vão para os ÚLTIMOS dias primeiro
+  // PASSO B: completa meta 100 — revisitas nos ÚLTIMOS dias, georestritas ao cluster do dia
+  // usadosComoRevisita já rastreia tudo desde o PASSO A — não precisa pré-popular
   {
     let avancou=true;
     while(totalVis<CFG.metaVis && avancou){
@@ -865,7 +895,16 @@ function gerarRoteiro(){
         if(totalVis>=CFG.metaVis)break;
         const slots=novoRot[data];
         if(!slots)continue;
-        if(tentaInserir(slots,CFG.maxPorDia)){totalVis++;avancou=true;}
+        if(tentaInserir(slots,CFG.maxPorDia,{globalUsed:usadosComoRevisita,geoKm:40})){
+          totalVis++;avancou=true;
+          // Reordena visitas do dia por horaIni preservando almoço e prospecções
+          const byHora=[...slots].sort((a,b)=>{
+            if(a.tipo==='almoco')return 0; // almoço fica na posição relativa
+            return a.horaIni.localeCompare(b.horaIni);
+          });
+          slots.length=0;
+          byHora.forEach(s=>slots.push(s));
+        }
       }
     }
   }
