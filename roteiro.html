@@ -720,8 +720,23 @@ function gerarRoteiro(){
   });
 
   // ── Segunda passagem: garante meta de 100 visitas (obrigatório) ─
-  // Tenta inserir visitas progressivamente, relaxando o limite diário se necessário.
-  // maxPorDia é o ideal, mas não pode ser empecilho para atingir a meta.
+  // Prospecção NUNCA conta como visita — o contador usa somente tipo==='visita'.
+  // Se o dia está cheio no limite ideal, relaxa progressivamente maxPorDia+1..+4.
+  // Dentro de cada tentativa, busca o melhor ponto de encaixe no dia:
+  //   a) após a última visita (mais comum)
+  //   b) após o almoço se o período da tarde ainda tem espaço
+  function melhorEncaixe(slots){
+    // Retorna {curFim, locAt} do melhor ponto para adicionar uma visita no dia.
+    // Testa: fim da última visita, e após o almoço se for mais cedo.
+    const visitas=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
+    if(!visitas.length)return null;
+    const ultima=visitas[visitas.length-1];
+    const pontos=[{curFim:h2m(ultima.horaFim),loc:{latitude:ultima.lat?String(ultima.lat):String(centro.lat),longitude:ultima.lon?String(ultima.lon):String(centro.lon)}}];
+    // Tenta também logo após o almoço (se a tarde ficou vazia)
+    const almoco=slots.find(s=>s.tipo==='almoco');
+    if(almoco){const fim=h2m(almoco.horaFim);if(fim<h2m(ultima.horaIni))pontos.push({curFim:fim,loc:{latitude:String(centro.lat),longitude:String(centro.lon)}});}
+    return pontos;
+  }
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
   for(let limDia=CFG.maxPorDia; limDia<=CFG.maxPorDia+4 && totalVis<CFG.metaVis; limDia++){
     let avancou=true;
@@ -732,18 +747,20 @@ function gerarRoteiro(){
         const slots=novoRot[data];
         if(!slots)continue;
         if(slots.filter(s=>s.tipo==='visita').length>=limDia)continue;
-        const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
-        if(!ultimaVis)continue;
-        let curFim=h2m(ultimaVis.horaFim);
-        const locAtExtra={latitude:ultimaVis.lat?String(ultimaVis.lat):String(centro.lat),longitude:ultimaVis.lon?String(ultimaVis.lon):String(centro.lon)};
-        const candidatos=[...rankRep].sort((a,b)=>travelMin(locAtExtra,{latitude:a.latitude,longitude:a.longitude})-travelMin(locAtExtra,{latitude:b.latitude,longitude:b.longitude}));
-        for(const c of candidatos){
-          const travel=travelMin(locAtExtra,{latitude:c.latitude,longitude:c.longitude});
-          const dur=duracaoCliente(c);
-          if(curFim+travel+dur<=CFG.horaFim){
-            curFim+=travel;
-            slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(curFim),horaFim:m2h(curFim+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
-            totalVis++; avancou=true; break;
+        const pontos=melhorEncaixe(slots);
+        if(!pontos)continue;
+        let inseriu=false;
+        for(const {curFim:cf,loc} of pontos){
+          if(inseriu)break;
+          const candidatos=[...rankRep].sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
+          for(const c of candidatos){
+            const travel=travelMin(loc,{latitude:c.latitude,longitude:c.longitude});
+            const dur=duracaoCliente(c);
+            if(cf+travel+dur<=CFG.horaFim){
+              const ini=cf+travel;
+              slots.push({tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,horaIni:m2h(ini),horaFim:m2h(ini+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
+              totalVis++; avancou=true; inseriu=true; break;
+            }
           }
         }
       }
