@@ -679,6 +679,7 @@ function gerarRoteiro(){
   }
 
   // ── PASSO 8: Constrói slots com horários ─────────────────────
+  let prosContador=0; // compartilhado entre todos os dias do mês
   futuros.forEach((data,di)=>{
     const agsFix=agendamentos.filter(a=>a.data===data).sort((a,b)=>h2m(a.hora)-h2m(b.hora));
     // NN começa do centróide do próprio cluster (não da carteira inteira)
@@ -759,6 +760,16 @@ function gerarRoteiro(){
         scoreRep:scoreRep(c),centralizado:c._centralizado||false
       });
       cur+=dur; locAt={latitude:c.latitude,longitude:c.longitude};
+      // Prospecção inline: ao sair de cidade singleton, insere prospecção antes do próximo deslocamento
+      const munAtual=(c.municipio||'').trim().toUpperCase();
+      const proxC=clientesOrdenados[vi+1];
+      const munProx=proxC?(proxC.municipio||'').trim().toUpperCase():null;
+      const ultimaNaCidade=munProx!==munAtual; // próximo cliente é de outra cidade (ou não existe)
+      if(cidadesSingleton.has(munAtual)&&ultimaNaCidade&&prosContador<CFG.maxProsp&&cur+CFG.pros<=CFG.horaFim){
+        const label=munAtual.charAt(0)+munAtual.slice(1).toLowerCase();
+        slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:c.municipio});
+        cur+=CFG.pros; prosContador++;
+      }
     }
 
     while(agIdx<agsFix.length){
@@ -855,11 +866,9 @@ function gerarRoteiro(){
     }
   }
 
-  // ── Prospecção ────────────────────────────────────────────────
-  // Adicionada no FIM do dia (após última visita), sem conflito de horário.
-  // Prioridade 1: dias com cidade singleton → label com o nome da cidade
-  // Prioridade 2: dias com sobra de tempo qualquer
-  let prosContador=0;
+  // ── Prospecção P2: dias genéricos com sobra de tempo ─────────
+  // P1 (singleton) já foi inserida dentro do PASSO 8, em sequência com os horários.
+  // P2 preenche dias sem singleton que ainda têm tempo sobrando.
   for(const data of futuros){
     if(prosContador>=CFG.maxProsp)break;
     const slots=novoRot[data];
