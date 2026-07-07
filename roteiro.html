@@ -768,7 +768,7 @@ function gerarRoteiro(){
       // Prospecção: permite começar até horaFim (pode terminar um pouco depois — horário flexível)
       if(cidadesSingleton.has(munAtual)&&ultimaNaCidade&&prosContador<CFG.maxProsp&&cur<=CFG.horaFim){
         const label=munAtual.charAt(0)+munAtual.slice(1).toLowerCase();
-        slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:c.municipio,lat:c.latitude,lon:c.longitude});
+        slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:c.municipio,lat:+c.latitude,lon:+c.longitude});
         cur+=CFG.pros; prosContador++;
       }
     }
@@ -892,7 +892,7 @@ function gerarRoteiro(){
     const ehSingleton=singletonsDia.length>0;
     // Só adiciona prospecção em dia genérico se ainda não atingiu metaProsp
     if(!ehSingleton&&prosContador>=CFG.metaProsp&&lastFim+CFG.pros>CFG.horaFim-30)continue;
-    slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaVis.municipio||''});
+    slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaVis.municipio||'',lat:ultimaVis.lat||0,lon:ultimaVis.lon||0});
     prosContador++;
   }
 
