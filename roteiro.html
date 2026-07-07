@@ -686,27 +686,32 @@ function gerarRoteiro(){
     }
   });
   let totalAtual=gruposUnicos.reduce((s,g)=>s+g.length,0);
-  // Pool de candidatos a revisita ordenado por scoreRep (mais importantes primeiro)
-  // Cada iteração encontra o MELHOR candidato válido para o dia mais vazio
-  // — sem avançar índice cegamente, que esgotava o pool sem atingir a meta
+  // Distribui revisitas até atingir metaVis.
+  // Estratégia: para cada slot vago, varre TODOS os dias (do mais vazio ao mais cheio)
+  // e tenta encaixar o melhor candidato com gap ≥ 14 dias.
+  // Dias cedo (índice < 14) não aceitam revisitas de clientes já visitados — pulamos para o próximo.
   while(totalAtual<CFG.metaVis){
-    let diBest=0;
-    futuros.forEach((d,di)=>{if(gruposUnicos[di].length<gruposUnicos[diBest].length&&gruposUnicos[di].length<MAX)diBest=di;});
-    if(gruposUnicos[diBest].length>=MAX)break;
-    // Candidatos: não usados, com gap ≥ 14 dias em relação à visita original no mesmo mês
-    const pool=rankRep.filter(c=>{
-      const id=c.cod_cliente+'_'+c.loja;
-      if(usadosNaClusters.has(id))return false;
-      if(diaOriginalCluster[id]!==undefined&&diBest-diaOriginalCluster[id]<MIN_GAP_P3)return false;
-      return true;
-    });
-    if(!pool.length)break; // nenhum candidato válido — impossível atingir meta com as restrições
-    // Escolhe o de maior scoreRep
-    const best=pool.reduce((a,b)=>scoreRep(b)>scoreRep(a)?b:a);
-    const bestId=best.cod_cliente+'_'+best.loja;
-    usadosNaClusters.add(bestId);
-    gruposUnicos[diBest].push({...best,_rep:true});
-    totalAtual++;
+    // Ordena dias: menos clientes primeiro, desempata por índice decrescente (revisitas nos últimos dias)
+    const diasOrdenados=futuros.map((_,i)=>i).filter(di=>gruposUnicos[di].length<MAX)
+      .sort((a,b)=>gruposUnicos[a].length-gruposUnicos[b].length||b-a);
+    let inseriu=false;
+    for(const di of diasOrdenados){
+      const pool=rankRep.filter(c=>{
+        const id=c.cod_cliente+'_'+c.loja;
+        if(usadosNaClusters.has(id))return false;
+        // Gap: revisita só depois de 14 dias corridos do cluster original
+        if(diaOriginalCluster[id]!==undefined&&di-diaOriginalCluster[id]<MIN_GAP_P3)return false;
+        return true;
+      });
+      if(!pool.length)continue; // esse dia não tem candidatos válidos — tenta o próximo
+      const best=pool.reduce((a,b)=>scoreRep(b)>scoreRep(a)?b:a);
+      usadosNaClusters.add(best.cod_cliente+'_'+best.loja);
+      gruposUnicos[di].push({...best,_rep:true});
+      totalAtual++;
+      inseriu=true;
+      break;
+    }
+    if(!inseriu)break; // nenhum dia aceita mais revisitas — meta inalcançável com as restrições atuais
   }
 
   // ── PASSO 8: Constrói slots com horários ─────────────────────
