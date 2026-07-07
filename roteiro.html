@@ -905,25 +905,20 @@ function gerarRoteiro(){
     return false;
   }
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  // PASSO A: corrige dias com < MIN visitas
-  // Dias "singleton" (visitam cidade pequena) não são forçados ao mínimo se já têm ≥ 3 visitas
-  // — o tempo restante será preenchido com prospecção naquela cidade.
-  function ehDiaSingleton(slots){
-    return slots.some(s=>s.tipo==='visita'&&cidadesSingleton.has((s.municipio||'').trim().toUpperCase()));
-  }
+  // PASSO A: todos os dias devem ter MIN (5) visitas — sem exceção
+  // Tenta primeiro com gap padrão (14d), depois relaxa para 7d se necessário
   {
-    let avancou=true;
-    while(avancou){
-      avancou=false;
-      for(const data of futuros){
-        const slots=novoRot[data];
-        if(!slots)continue;
-        const nVis=slots.filter(s=>s.tipo==='visita').length;
-        if(nVis>=MIN)continue;
-        // Dia singleton com prospecção já inserida: não forçar revisitas de outras cidades
-        const temProsp=slots.some(s=>s.tipo==='prospeccao');
-        if(ehDiaSingleton(slots)&&(nVis>=3||temProsp))continue;
-        if(tentaInserir(slots,CFG.maxPorDia,{globalUsed:usadosComoRevisita})){totalVis++;avancou=true;}
+    for(const minGap of [14,7,5,3]){
+      let avancou=true;
+      while(avancou){
+        avancou=false;
+        for(const data of futuros){
+          const slots=novoRot[data];
+          if(!slots)continue;
+          const nVis=slots.filter(s=>s.tipo==='visita').length;
+          if(nVis>=MIN)continue;
+          if(tentaInserir(slots,CFG.maxPorDia,{globalUsed:usadosComoRevisita,minGap})){totalVis++;avancou=true;}
+        }
       }
     }
   }
