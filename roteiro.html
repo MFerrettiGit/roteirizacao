@@ -849,9 +849,9 @@ function gerarRoteiro(){
         if(!slots)continue;
         const nVis=slots.filter(s=>s.tipo==='visita').length;
         if(nVis>=MIN)continue;
-        // Dia singleton com prospecção já inserida: não força mais revisitas além de nVis≥3
+        // Dia singleton com prospecção já inserida: não forçar revisitas de outras cidades
         const temProsp=slots.some(s=>s.tipo==='prospeccao');
-        if(ehDiaSingleton(slots)&&(nVis>=3||(temProsp&&nVis>=2)))continue;
+        if(ehDiaSingleton(slots)&&(nVis>=3||temProsp))continue;
         if(tentaInserir(slots,CFG.maxPorDia)){totalVis++;avancou=true;}
       }
     }
