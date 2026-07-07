@@ -382,8 +382,9 @@ const CFG = {
   almoco: {ini:11*60+30, fim:13*60+30}, almocoMin: 60,
   velKmH: 35, parking: 8,
   pros: 45,
-  metaVis: 100, metaH: 100, metaProsp: 2, maxProsp: 4,
+  metaVis: 100, metaH: 100, metaProsp: 2, maxProsp: 8,
   minPorDia: 5, maxPorDia: 8, maxDesvioKm: 35,
+  maxClientesSingleton: 2, // cidade com ≤ N clientes na carteira → singleton → gera prospecção
   maxAporDia: 2,
   tempoClasse: {A:90, B:60, C:45, '':30},
 };
@@ -516,6 +517,11 @@ function gerarRoteiro(){
     cnpjJaVisto.add(c.cnpj); return true;
   });
   pool.forEach(c=>{c._centralizado=c.cnpj&&cnpjCount[c.cnpj]>1;});
+
+  // Cidades singleton: ≤ maxClientesSingleton clientes na carteira → prospecção planejada
+  const tamanhoMun={};
+  pool.forEach(c=>{const m=(c.municipio||'').trim().toUpperCase();tamanhoMun[m]=(tamanhoMun[m]||0)+1;});
+  const cidadesSingleton=new Set(Object.entries(tamanhoMun).filter(([,n])=>n<=CFG.maxClientesSingleton).map(([m])=>m));
 
   const MIN=CFG.minPorDia, MAX=CFG.maxPorDia;
 
@@ -814,7 +820,12 @@ function gerarRoteiro(){
     return false;
   }
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  // PASSO A: corrige dias com < MIN visitas (iteração NORMAL — qualquer dia carente)
+  // PASSO A: corrige dias com < MIN visitas
+  // Dias "singleton" (visitam cidade pequena) não são forçados ao mínimo se já têm ≥ 3 visitas
+  // — o tempo restante será preenchido com prospecção naquela cidade.
+  function ehDiaSingleton(slots){
+    return slots.some(s=>s.tipo==='visita'&&cidadesSingleton.has((s.municipio||'').trim().toUpperCase()));
+  }
   {
     let avancou=true;
     while(avancou){
@@ -822,7 +833,10 @@ function gerarRoteiro(){
       for(const data of futuros){
         const slots=novoRot[data];
         if(!slots)continue;
-        if(slots.filter(s=>s.tipo==='visita').length>=MIN)continue;
+        const nVis=slots.filter(s=>s.tipo==='visita').length;
+        if(nVis>=MIN)continue;
+        // Dia singleton com ≥ 3 visitas: não força mais — prospecção preenche o tempo
+        if(ehDiaSingleton(slots)&&nVis>=3)continue;
         if(tentaInserir(slots,CFG.maxPorDia)){totalVis++;avancou=true;}
       }
     }
@@ -841,17 +855,44 @@ function gerarRoteiro(){
     }
   }
 
-  // ── Prospecção: máx 4, só onde sobra tempo ───────────────────
+  // ── Prospecção ────────────────────────────────────────────────
+  // Prioridade 1: dias que visitam cidades singleton → 1 prospecção por cidade singleton
+  // Prioridade 2: dias com sobra de tempo (qualquer dia, até atingir maxProsp)
   let prosContador=0;
+  // P1 — cidades singleton visitadas
   for(const data of futuros){
     if(prosContador>=CFG.maxProsp)break;
     const slots=novoRot[data];
     if(!slots)continue;
+    const visitas=slots.filter(s=>s.tipo==='visita'&&s.municipio);
+    const singletonsDia=[...new Set(visitas.map(s=>(s.municipio||'').trim().toUpperCase()))]
+      .filter(m=>cidadesSingleton.has(m));
+    for(const cidade of singletonsDia){
+      if(prosContador>=CFG.maxProsp)break;
+      // Insere prospecção após a última visita nessa cidade
+      const ultimaNaCidade=visitas.filter(s=>(s.municipio||'').trim().toUpperCase()===cidade).slice(-1)[0];
+      if(!ultimaNaCidade)continue;
+      const fim=h2m(ultimaNaCidade.horaFim);
+      if(fim+CFG.pros>CFG.horaFim)continue;
+      // Insere no array na posição correta (após ultimaNaCidade)
+      const idx=slots.indexOf(ultimaNaCidade);
+      slots.splice(idx+1,0,{tipo:'prospeccao',nome:`Prospecção — ${cidade.charAt(0)+cidade.slice(1).toLowerCase()}`,horaIni:m2h(fim),horaFim:m2h(fim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaNaCidade.municipio});
+      prosContador++;
+    }
+  }
+  // P2 — dias com sobra de tempo (preenche até maxProsp)
+  for(const data of futuros){
+    if(prosContador>=CFG.maxProsp)break;
+    const slots=novoRot[data];
+    if(!slots)continue;
+    // Não adiciona 2ª prospecção no mesmo dia
+    if(slots.some(s=>s.tipo==='prospeccao'))continue;
     const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
     if(!ultimaVis)continue;
     const lastFim=h2m(ultimaVis.horaFim);
     if(lastFim+CFG.pros<=CFG.horaFim-5){
-      slots.push({tipo:'prospeccao',nome:'Prospecção — novo cliente',horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:slots.filter(s=>s.municipio).slice(-1)[0]?.municipio||''});
+      const munUlt=(ultimaVis.municipio||'').trim();
+      slots.push({tipo:'prospeccao',nome:`Prospecção — ${munUlt.charAt(0)+munUlt.slice(1).toLowerCase()||'novo cliente'}`,horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaVis.municipio||''});
       prosContador++;
     }
   }
