@@ -856,45 +856,31 @@ function gerarRoteiro(){
   }
 
   // ── Prospecção ────────────────────────────────────────────────
-  // Prioridade 1: dias que visitam cidades singleton → 1 prospecção por cidade singleton
-  // Prioridade 2: dias com sobra de tempo (qualquer dia, até atingir maxProsp)
+  // Adicionada no FIM do dia (após última visita), sem conflito de horário.
+  // Prioridade 1: dias com cidade singleton → label com o nome da cidade
+  // Prioridade 2: dias com sobra de tempo qualquer
   let prosContador=0;
-  // P1 — cidades singleton visitadas
   for(const data of futuros){
     if(prosContador>=CFG.maxProsp)break;
     const slots=novoRot[data];
     if(!slots)continue;
-    const visitas=slots.filter(s=>s.tipo==='visita'&&s.municipio);
-    const singletonsDia=[...new Set(visitas.map(s=>(s.municipio||'').trim().toUpperCase()))]
-      .filter(m=>cidadesSingleton.has(m));
-    for(const cidade of singletonsDia){
-      if(prosContador>=CFG.maxProsp)break;
-      // Insere prospecção após a última visita nessa cidade
-      const ultimaNaCidade=visitas.filter(s=>(s.municipio||'').trim().toUpperCase()===cidade).slice(-1)[0];
-      if(!ultimaNaCidade)continue;
-      const fim=h2m(ultimaNaCidade.horaFim);
-      if(fim+CFG.pros>CFG.horaFim)continue;
-      // Insere no array na posição correta (após ultimaNaCidade)
-      const idx=slots.indexOf(ultimaNaCidade);
-      slots.splice(idx+1,0,{tipo:'prospeccao',nome:`Prospecção — ${cidade.charAt(0)+cidade.slice(1).toLowerCase()}`,horaIni:m2h(fim),horaFim:m2h(fim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaNaCidade.municipio});
-      prosContador++;
-    }
-  }
-  // P2 — dias com sobra de tempo (preenche até maxProsp)
-  for(const data of futuros){
-    if(prosContador>=CFG.maxProsp)break;
-    const slots=novoRot[data];
-    if(!slots)continue;
-    // Não adiciona 2ª prospecção no mesmo dia
     if(slots.some(s=>s.tipo==='prospeccao'))continue;
     const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
     if(!ultimaVis)continue;
     const lastFim=h2m(ultimaVis.horaFim);
-    if(lastFim+CFG.pros<=CFG.horaFim-5){
-      const munUlt=(ultimaVis.municipio||'').trim();
-      slots.push({tipo:'prospeccao',nome:`Prospecção — ${munUlt.charAt(0)+munUlt.slice(1).toLowerCase()||'novo cliente'}`,horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaVis.municipio||''});
-      prosContador++;
-    }
+    if(lastFim+CFG.pros>CFG.horaFim)continue;
+    // Identifica cidades singleton visitadas hoje para nomear a prospecção
+    const visitas=slots.filter(s=>s.tipo==='visita'&&s.municipio);
+    const singletonsDia=[...new Set(visitas.map(s=>(s.municipio||'').trim().toUpperCase()))]
+      .filter(m=>cidadesSingleton.has(m));
+    const label=singletonsDia.length
+      ? singletonsDia.map(m=>m.charAt(0)+m.slice(1).toLowerCase()).join(' / ')
+      : (ultimaVis.municipio||'novo cliente');
+    const ehSingleton=singletonsDia.length>0;
+    // Só adiciona prospecção em dia genérico se ainda não atingiu metaProsp
+    if(!ehSingleton&&prosContador>=CFG.metaProsp&&lastFim+CFG.pros>CFG.horaFim-30)continue;
+    slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaVis.municipio||''});
+    prosContador++;
   }
 
   roteiro=novoRot;
