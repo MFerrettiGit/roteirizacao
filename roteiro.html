@@ -1104,7 +1104,18 @@ function renderMapa(){
     const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}<br>${s.diasSemPedido&&s.diasSemPedido<999?`🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
     _ml.push(mk);ll.push([s.lat,s.lon]);
   });
-  if(ll.length>1){const ln=L.polyline(ll,{color:'#2B2FA8',weight:3,opacity:.65,dashArray:'8,5'}).addTo(mapaInst);_ml.push(ln);}
+  // Ponto de partida/chegada (casa do vendedor)
+  const vHome=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
+  if(vHome&&ll.length){
+    const homeIcon=L.divIcon({html:`<div style="background:#059669;color:#fff;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4)">🏠</div>`,className:'',iconSize:[32,32],iconAnchor:[16,16]});
+    const hmk=L.marker([vHome.lat,vHome.lon],{icon:homeIcon}).bindPopup(`<b>Casa — ${vHome.nome}</b><br>Ponto de partida e chegada`).addTo(mapaInst);
+    _ml.push(hmk);
+    const lnIda=L.polyline([[vHome.lat,vHome.lon],ll[0]],{color:'#059669',weight:2,opacity:.7,dashArray:'6,4'}).addTo(mapaInst);
+    const lnVolta=L.polyline([ll[ll.length-1],[vHome.lat,vHome.lon]],{color:'#059669',weight:2,opacity:.7,dashArray:'6,4'}).addTo(mapaInst);
+    _ml.push(lnIda,lnVolta);
+    ll.push([vHome.lat,vHome.lon]);
+  }
+  if(ll.length>1){const ln=L.polyline(ll.slice(0,ll.length-(vHome&&ll.length?1:0)),{color:'#2B2FA8',weight:3,opacity:.65,dashArray:'8,5'}).addTo(mapaInst);_ml.push(ln);}
   if(ll.length)mapaInst.fitBounds(ll,{padding:[40,40]});
 }
 
