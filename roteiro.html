@@ -374,6 +374,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 </div>
 
 <script src="dados/clientes.js"></script>
+<script src="dados/vendedores.js"></script>
 <script>
 // ── CONFIG ──────────────────────────────────────────────────
 const CFG = {
@@ -518,11 +519,12 @@ function gerarRoteiro(){
 
   const MIN=CFG.minPorDia, MAX=CFG.maxPorDia;
 
-  // Centróide da carteira (proxy do ponto de saída do vendedor)
-  const centro={
-    lat:pool.reduce((s,c)=>s+(+c.latitude),0)/pool.length,
-    lon:pool.reduce((s,c)=>s+(+c.longitude),0)/pool.length
-  };
+  // Ponto de saída/chegada: endereço residencial do vendedor (se disponível)
+  const vHome=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
+  const centro=vHome
+    ? {lat:vHome.lat, lon:vHome.lon}
+    : {lat:pool.reduce((s,c)=>s+(+c.latitude),0)/pool.length,
+       lon:pool.reduce((s,c)=>s+(+c.longitude),0)/pool.length};
   centro.latitude=String(centro.lat); centro.longitude=String(centro.lon);
 
   // Score de prioridade de visita
