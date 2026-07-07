@@ -765,9 +765,10 @@ function gerarRoteiro(){
       const proxC=clientesOrdenados[vi+1];
       const munProx=proxC?(proxC.municipio||'').trim().toUpperCase():null;
       const ultimaNaCidade=munProx!==munAtual; // próximo cliente é de outra cidade (ou não existe)
-      if(cidadesSingleton.has(munAtual)&&ultimaNaCidade&&prosContador<CFG.maxProsp&&cur+CFG.pros<=CFG.horaFim){
+      // Prospecção: permite começar até horaFim (pode terminar um pouco depois — horário flexível)
+      if(cidadesSingleton.has(munAtual)&&ultimaNaCidade&&prosContador<CFG.maxProsp&&cur<=CFG.horaFim){
         const label=munAtual.charAt(0)+munAtual.slice(1).toLowerCase();
-        slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:c.municipio});
+        slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:c.municipio,lat:c.latitude,lon:c.longitude});
         cur+=CFG.pros; prosContador++;
       }
     }
@@ -1189,16 +1190,22 @@ function fecharMapa(){document.getElementById('mapaOverlay').classList.remove('s
 let _ml=[];
 function renderMapa(){
   _ml.forEach(l=>mapaInst.removeLayer(l));_ml=[];
-  const dstr=ds(diaSel),slots=(roteiro[dstr]||[]).filter(s=>s.lat&&s.lon);
+  const dstr=ds(diaSel),slots=(roteiro[dstr]||[]).filter(s=>s.lat&&s.lon||s.tipo==='prospeccao'&&s.lat);
   document.getElementById('mapaTitle').textContent='Roteiro — '+nomeDataLongo(diaSel);
   if(!slots.length){mapaInst.setView([-21,-47],9);return;}
   const COR={A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#6b7280'};
   const ll=[];
   slots.forEach((s,i)=>{
-    const cor=COR[s.classificacao]||'#2B2FA8';
-    const bg=s.rep?'#7c3aed':cor;
-    const icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}<br>${s.diasSemPedido&&s.diasSemPedido<999?`🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
+    if(!s.lat&&!s.lon)return;
+    let icon;
+    if(s.tipo==='prospeccao'){
+      icon=L.divIcon({html:`<div style="background:#059669;color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">🌱</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
+    } else {
+      const cor=COR[s.classificacao]||'#2B2FA8';
+      const bg=s.rep?'#7c3aed':cor;
+      icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
+    }
+    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
     _ml.push(mk);ll.push([s.lat,s.lon]);
   });
   // Ponto de partida/chegada (casa do vendedor)
