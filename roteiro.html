@@ -495,7 +495,7 @@ function gerarRoteiro(){
   const util=diasUteis(ano,mes);
   const futuros=util.filter(d=>d>=hojeStr);
 
-  const novoRot={};
+  window._novoRot={}; const novoRot=window._novoRot;
   util.filter(d=>d<hojeStr).forEach(d=>{if(roteiro[d])novoRot[d]=roteiro[d];});
 
   if(!futuros.length||!CLIENTES.length){roteiro=novoRot;salvar();renderTudo();return;}
@@ -517,6 +517,11 @@ function gerarRoteiro(){
     cnpjJaVisto.add(c.cnpj); return true;
   });
   pool.forEach(c=>{c._centralizado=c.cnpj&&cnpjCount[c.cnpj]>1;});
+  // Dedup por clienteId (cod_cliente+loja): se o banco tiver o mesmo PDV duplicado, manter só o primeiro
+  const _cidVisto=new Set();
+  const poolDedup=pool.filter(c=>{const id=c.cod_cliente+'_'+c.loja;if(_cidVisto.has(id))return false;_cidVisto.add(id);return true;});
+  // Reatribuir pool → poolDedup nas referências seguintes
+  pool.length=0; poolDedup.forEach(c=>pool.push(c));
 
   // Cidades singleton: ≤ maxClientesSingleton clientes na carteira → prospecção planejada
   const tamanhoMun={};
@@ -673,8 +678,8 @@ function gerarRoteiro(){
       const candidatos=rankRep.filter(c=>{
         const id=c.cod_cliente+'_'+c.loja;
         if(usadosNaClusters.has(id))return false;
-        // revisita só no cluster que estiver ≥ 14 dias após a visita original
-        if(diaOriginalCluster[id]!==undefined&&di-diaOriginalCluster[id]<MIN_GAP_P3)return false;
+        // Gap simétrico: bloqueia revisita se distância (em qualquer direção) for < MIN_GAP_P3
+        if(diaOriginalCluster[id]!==undefined&&Math.abs(di-diaOriginalCluster[id])<MIN_GAP_P3)return false;
         return true;
       });
       if(!candidatos.length)break;
@@ -698,8 +703,8 @@ function gerarRoteiro(){
       const pool=rankRep.filter(c=>{
         const id=c.cod_cliente+'_'+c.loja;
         if(usadosNaClusters.has(id))return false;
-        // Gap: revisita só depois de 14 dias corridos do cluster original
-        if(diaOriginalCluster[id]!==undefined&&di-diaOriginalCluster[id]<MIN_GAP_P3)return false;
+        // Gap simétrico: bloqueia revisita se distância (em qualquer direção) for < MIN_GAP_P3
+        if(diaOriginalCluster[id]!==undefined&&Math.abs(di-diaOriginalCluster[id])<MIN_GAP_P3)return false;
         return true;
       });
       if(!pool.length)continue; // esse dia não tem candidatos válidos — tenta o próximo
@@ -756,7 +761,10 @@ function gerarRoteiro(){
       }
       return lista;
     }
-    const clientesOrdenados=filtrarPorRota(nnSort(gruposUnicos[di],cc.lat,cc.lon));
+    // Dedup: mesmo cliente pode ter entrado duas vezes no cluster via PASSO 3 — remover duplicatas
+    const _vistosCluster=new Set();
+    const _clusterDedup=gruposUnicos[di].filter(c=>{const id=c.cod_cliente+'_'+c.loja;if(_vistosCluster.has(id))return false;_vistosCluster.add(id);return true;});
+    const clientesOrdenados=filtrarPorRota(nnSort(_clusterDedup,cc.lat,cc.lon));
 
     const slots=[];
     let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
@@ -831,12 +839,15 @@ function gerarRoteiro(){
   //   2. Revisitas extras (para meta 100) vão para os ÚLTIMOS dias do mês primeiro.
   // Prospecção NUNCA conta como visita.
   function melhorEncaixe(slots){
+    const homeLoc={latitude:String(vHome?vHome.lat:centro.lat),longitude:String(vHome?vHome.lon:centro.lon)};
     const visitas=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
-    if(!visitas.length)return null;
+    if(!visitas.length) return [{curFim:CFG.horaIni,loc:homeLoc}];
     const ultima=visitas[visitas.length-1];
     const pontos=[{curFim:h2m(ultima.horaFim),loc:{latitude:ultima.lat?String(ultima.lat):String(centro.lat),longitude:ultima.lon?String(ultima.lon):String(centro.lon)}}];
     const almoco=slots.find(s=>s.tipo==='almoco');
-    if(almoco){const fim=h2m(almoco.horaFim);if(fim<h2m(ultima.horaIni))pontos.push({curFim:fim,loc:{latitude:String(centro.lat),longitude:String(centro.lon)}});}
+    if(almoco){const fim=h2m(almoco.horaFim);if(fim<h2m(ultima.horaIni))pontos.push({curFim:fim,loc:homeLoc});}
+    // Slot de início do expediente: útil quando o dia começa tarde (visitas apenas à tarde)
+    pontos.push({curFim:CFG.horaIni,loc:homeLoc});
     return pontos;
   }
   // usadosComoRevisita: impede o mesmo cliente aparecer como revisita em dois dias diferentes
@@ -846,10 +857,18 @@ function gerarRoteiro(){
   Object.values(novoRot).forEach(sl=>sl.filter(s=>s.rep&&s.clienteId).forEach(s=>usadosComoRevisita.add(s.clienteId)));
 
   // diaOriginal: mapa clienteId → índice (0-based) do dia em que ocorre a visita original (não-rep)
-  // Usado para garantir espaçamento mínimo de 14 dias entre visita e revisita
+  // diaOriginal: dia da visita não-rep (usada no gap check principal)
   const diaOriginal={};
   futuros.forEach((data,idx)=>{
     (novoRot[data]||[]).filter(s=>s.clienteId&&!s.rep).forEach(s=>{diaOriginal[s.clienteId]=idx;});
+  });
+  // diaQualquerVisita: todos os dias de visita (original + revisita) — para gap check de revisitas múltiplas
+  const diaQualquerVisita={}; // clienteId → Set de índices de dia
+  futuros.forEach((data,idx)=>{
+    (novoRot[data]||[]).filter(s=>s.clienteId&&s.tipo==='visita').forEach(s=>{
+      if(!diaQualquerVisita[s.clienteId]) diaQualquerVisita[s.clienteId]=new Set();
+      diaQualquerVisita[s.clienteId].add(idx);
+    });
   });
   const MIN_GAP_DIAS=14;
 
@@ -876,9 +895,24 @@ function gerarRoteiro(){
         const id=c.cod_cliente+'_'+c.loja;
         if(idsNoDia.has(id))return false;
         if(opts.globalUsed&&opts.globalUsed.has(id))return false; // já revisitado em outro dia
-        // Espaçamento mínimo: revisita só após gap mínimo (padrão 14d, relaxável em fallback)
+        // Gap: só aplica quando a revisita vem DEPOIS da visita original
+        // Se vier antes (idxDiaAtual < diaOriginal), é uma pré-visita legítima para preencher dia cedo
         const gapMin=opts.minGap!==undefined?opts.minGap:MIN_GAP_DIAS;
-        if(idxDiaAtual>=0&&diaOriginal[id]!==undefined&&idxDiaAtual-diaOriginal[id]<gapMin)return false;
+        if(idxDiaAtual>=0){
+          // Verificar gap em relação a TODOS os dias que este cliente já aparece (original + revisitas)
+          const diasVisita=diaQualquerVisita[id];
+          if(diasVisita){
+            for(const dv of diasVisita){
+              if(Math.abs(idxDiaAtual-dv)<gapMin)return false;
+            }
+          } else if(diaOriginal[id]!==undefined){
+            // Fallback: só tem diaOriginal (compatibilidade)
+            const checkGap=opts.minGap!==undefined
+              ?Math.abs(idxDiaAtual-diaOriginal[id])<gapMin
+              :(idxDiaAtual>diaOriginal[id]&&idxDiaAtual-diaOriginal[id]<gapMin);
+            if(checkGap)return false;
+          }
+        }
         if(maxGeoKm&&cLat!==null){ // restrição geográfica: apenas clientes próximos ao cluster do dia
           const dkm=haversine(cLat,cLon,+c.latitude,+c.longitude);
           if(dkm>maxGeoKm)return false;
@@ -898,6 +932,11 @@ function gerarRoteiro(){
           slots.push({tipo:'visita',clienteId:id,nome:c.nome_cliente,horaIni:m2h(cf+travel),horaFim:m2h(cf+travel+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
           idsNoDia.add(id);
           if(opts.globalUsed)opts.globalUsed.add(id);
+          // Registrar no mapa global de dias de visita para futuros gap checks
+          if(idxDiaAtual>=0){
+            if(!diaQualquerVisita[id])diaQualquerVisita[id]=new Set();
+            diaQualquerVisita[id].add(idxDiaAtual);
+          }
           return true;
         }
       }
@@ -921,6 +960,20 @@ function gerarRoteiro(){
         }
       }
     }
+    // Fallback final: remove restrição globalUsed; reduz gap até 1 (prioridade absoluta ao mínimo/dia)
+    for(const minGap of [14,7,5,3,1]){
+      let avancou=true;
+      while(avancou){
+        avancou=false;
+        for(const data of futuros){
+          const slots=novoRot[data];
+          if(!slots)continue;
+          const nVis=slots.filter(s=>s.tipo==='visita').length;
+          if(nVis>=MIN)continue;
+          if(tentaInserir(slots,CFG.maxPorDia,{minGap})){totalVis++;avancou=true;}
+        }
+      }
+    }
   }
   // PASSO B: completa meta 100 — revisitas nos ÚLTIMOS dias
   // 1ª passagem com geo 40km; se ainda faltar, 2ª sem geo (garante sempre chegar em 100)
@@ -938,6 +991,22 @@ function gerarRoteiro(){
           const slots=novoRot[data];
           if(!slots)continue;
           if(tentaInserir(slots,CFG.maxPorDia,{globalUsed:usadosComoRevisita,geoKm,minGap})){
+            totalVis++;avancou=true;
+            reordenar(slots);
+          }
+        }
+      }
+    }
+    // Fallback sem globalUsed (permite 3ª visita — necessário para setores muito pequenos)
+    for(const minGap of [14,7,5,3,1]){
+      let avancou=true;
+      while(totalVis<CFG.metaVis && avancou){
+        avancou=false;
+        for(const data of [...futuros].reverse()){
+          if(totalVis>=CFG.metaVis)break;
+          const slots=novoRot[data];
+          if(!slots)continue;
+          if(tentaInserir(slots,CFG.maxPorDia,{minGap})){
             totalVis++;avancou=true;
             reordenar(slots);
           }
@@ -971,6 +1040,13 @@ function gerarRoteiro(){
     slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaVis.municipio||'',lat:ultimaVis.lat||0,lon:ultimaVis.lon||0});
     prosContador++;
   }
+
+  // DEDUP de segurança: remove clienteId duplicado dentro do mesmo dia (antes do reordenamento)
+  Object.values(novoRot).forEach(slots=>{
+    const seen=new Set();
+    const ok=slots.filter(s=>{if(!s.clienteId)return true;if(seen.has(s.clienteId))return false;seen.add(s.clienteId);return true;});
+    slots.length=0;ok.forEach(s=>slots.push(s));
+  });
 
   // PASSO C: reordena visitas de cada dia por nearest-neighbor a partir de casa
   // Sem isso o algoritmo empilha clientes na ordem de inserção, gerando rotas em zigue-zague.
