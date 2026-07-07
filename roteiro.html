@@ -678,44 +678,43 @@ function gerarRoteiro(){
     // NN começa do centróide do próprio cluster (não da carteira inteira)
     // → evita puxar cliente isolado como ponto de partida
     const cc=clusterCentro(gruposUnicos[di]);
-    // Município dominante do cluster do dia
+    // Município dominante do cluster do dia (usado pelo tentaInserir)
     function munDominante(grupo){
       const cnt={};
       grupo.forEach(c=>{const m=(c.municipio||'').trim().toUpperCase();cnt[m]=(cnt[m]||0)+1;});
       return Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     }
     const munDom=munDominante(gruposUnicos[di]);
-    // Filtro de desvio: remove clientes que criam "V" no trajeto.
-    // Threshold duplo: 35km dentro do mesmo município; 15km para clientes de outro município.
-    // Cliente de município diferente que desvia >15km é removido — PASSO A recoloca revisita local.
-    function filtrarDesvios(lista){
-      if(lista.length<=2)return lista;
-      let changed=true;
-      while(changed){
-        changed=false;
-        for(let i=1;i<lista.length-1;i++){
-          const prev=lista[i-1],cur2=lista[i],nxt=lista[i+1];
-          const desvio=haversine(+prev.latitude,+prev.longitude,+cur2.latitude,+cur2.longitude)
-                      +haversine(+cur2.latitude,+cur2.longitude,+nxt.latitude,+nxt.longitude)
-                      -haversine(+prev.latitude,+prev.longitude,+nxt.latitude,+nxt.longitude);
-          const mismatch=(cur2.municipio||'').trim().toUpperCase()!==munDom;
-          const limiar=mismatch?CFG.maxDesvioKm*0.4:CFG.maxDesvioKm;
-          if(desvio>limiar){lista.splice(i,1);changed=true;break;}
+    // Filtro de rota: remove o cliente que mais economiza km se a economia > minReducaoKm.
+    // Puramente geográfico — não depende do campo município no cadastro.
+    // Repete até nenhuma remoção ser vantajosa (garante convergência).
+    function kmRota(lista){
+      if(!lista.length)return 0;
+      let km=haversine(centro.lat,centro.lon,+lista[0].latitude,+lista[0].longitude);
+      for(let i=0;i<lista.length-1;i++)
+        km+=haversine(+lista[i].latitude,+lista[i].longitude,+lista[i+1].latitude,+lista[i+1].longitude);
+      km+=haversine(+lista[lista.length-1].latitude,+lista[lista.length-1].longitude,centro.lat,centro.lon);
+      return km;
+    }
+    function filtrarPorRota(lista){
+      const MIN_REDUCAO=CFG.maxDesvioKm; // economia mínima para valer remover (35km)
+      let mudou=true;
+      while(mudou&&lista.length>2){
+        mudou=false;
+        const kmBase=kmRota(lista);
+        let melhorReducao=MIN_REDUCAO,melhorIdx=-1;
+        for(let i=0;i<lista.length;i++){
+          const sem=[...lista.slice(0,i),...lista.slice(i+1)];
+          // Reordena o restante pelo NN para ter rota justa após remoção
+          const reordenado=sem.length>1?nnSort(sem,cc.lat,cc.lon):sem;
+          const reducao=kmBase-kmRota(reordenado);
+          if(reducao>melhorReducao){melhorReducao=reducao;melhorIdx=i;}
         }
-        // Verifica também o último cliente (desvio em relação à casa)
-        if(!changed&&lista.length>=2){
-          const pen=lista[lista.length-2],ult=lista[lista.length-1];
-          const desvioFim=haversine(+pen.latitude,+pen.longitude,+ult.latitude,+ult.longitude)
-                         +haversine(+ult.latitude,+ult.longitude,centro.lat,centro.lon)
-                         -haversine(+pen.latitude,+pen.longitude,centro.lat,centro.lon);
-          const mismatch=(ult.municipio||'').trim().toUpperCase()!==munDom;
-          const limiar=mismatch?CFG.maxDesvioKm*0.4:CFG.maxDesvioKm;
-          if(desvioFim>limiar){lista.splice(lista.length-1,1);changed=true;}
-        }
+        if(melhorIdx>=0){lista.splice(melhorIdx,1);mudou=true;}
       }
       return lista;
     }
-    const clientesOrdenados=filtrarDesvios(nnSort(gruposUnicos[di],cc.lat,cc.lon));
+    const clientesOrdenados=filtrarPorRota(nnSort(gruposUnicos[di],cc.lat,cc.lon));
 
     const slots=[];
     let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
