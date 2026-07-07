@@ -1193,42 +1193,55 @@ function fecharMapa(){document.getElementById('mapaOverlay').classList.remove('s
 let _ml=[];
 function renderMapa(){
   _ml.forEach(l=>mapaInst.removeLayer(l));_ml=[];
-  const dstr=ds(diaSel),slots=(roteiro[dstr]||[]).filter(s=>s.lat&&s.lon||s.tipo==='prospeccao'&&s.lat);
+  const dstr=ds(diaSel),allSlots=roteiro[dstr]||[];
   document.getElementById('mapaTitle').textContent='Roteiro — '+nomeDataLongo(diaSel);
-  if(!slots.length){mapaInst.setView([-21,-47],9);return;}
   const COR={A:'#dc2626',B:'#ea580c',C:'#ca8a04','':'#6b7280'};
-  const ll=[];
-  slots.forEach((s,i)=>{
-    if(!s.lat&&!s.lon)return;
-    let icon;
-    // lat/lon usados para o marker (prospecção fica levemente deslocada para não sobrepor o cliente)
-    const mlat=s.tipo==='prospeccao'?s.lat+0.008:s.lat;
-    const mlon=s.tipo==='prospeccao'?s.lon+0.008:s.lon;
-    if(s.tipo==='prospeccao'){
-      icon=L.divIcon({html:`<div style="background:#059669;color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">🌱</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    } else {
-      const cor=COR[s.classificacao]||'#2B2FA8';
-      const bg=s.rep?'#7c3aed':cor;
-      icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    }
-    const mk=L.marker([mlat,mlon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
-    _ml.push(mk);
-    // Prospecção não entra na linha de rota (não é deslocamento)
-    if(s.tipo!=='prospeccao') ll.push([s.lat,s.lon]);
-  });
-  // Ponto de partida/chegada (casa do vendedor)
   const vHome=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
-  if(vHome&&ll.length){
+
+  // Separa visitas (com GPS) e prospecções (com GPS)
+  const visitas=allSlots.filter(s=>(s.tipo==='visita'||s.tipo==='agendamento')&&s.lat&&s.lon);
+  const prosps=allSlots.filter(s=>s.tipo==='prospeccao'&&s.lat&&s.lon);
+
+  if(!visitas.length&&!prosps.length){mapaInst.setView([-21,-47],9);return;}
+  const bounds=[];
+
+  // Marcadores de visita com número sequencial
+  visitas.forEach((s,i)=>{
+    const cor=COR[s.classificacao]||'#2B2FA8';
+    const bg=s.rep?'#7c3aed':cor;
+    const icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
+    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
+    _ml.push(mk);bounds.push([s.lat,s.lon]);
+  });
+
+  // Marcadores de prospecção 🌱 (deslocados levemente para não sobrepor o cliente)
+  prosps.forEach(s=>{
+    const mlat=s.lat+0.008,mlon=s.lon+0.008;
+    const icon=L.divIcon({html:`<div style="background:#059669;color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">🌱</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
+    const mk=L.marker([mlat,mlon],{icon}).bindPopup(`<b>${s.nome}</b><br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}`).addTo(mapaInst);
+    _ml.push(mk);bounds.push([mlat,mlon]);
+  });
+
+  // Linha de rota azul tracejada — apenas entre visitas, em ordem
+  if(visitas.length>1){
+    const coords=visitas.map(s=>[s.lat,s.lon]);
+    const ln=L.polyline(coords,{color:'#2B2FA8',weight:3,opacity:.65,dashArray:'8,5'}).addTo(mapaInst);
+    _ml.push(ln);
+  }
+
+  // Casa do vendedor: 🏠 + linhas verdes tracejadas (partida e chegada)
+  if(vHome&&visitas.length){
     const homeIcon=L.divIcon({html:`<div style="background:#059669;color:#fff;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4)">🏠</div>`,className:'',iconSize:[32,32],iconAnchor:[16,16]});
     const hmk=L.marker([vHome.lat,vHome.lon],{icon:homeIcon}).bindPopup(`<b>Casa — ${vHome.nome}</b><br>Ponto de partida e chegada`).addTo(mapaInst);
     _ml.push(hmk);
-    const lnIda=L.polyline([[vHome.lat,vHome.lon],ll[0]],{color:'#059669',weight:2,opacity:.7,dashArray:'6,4'}).addTo(mapaInst);
-    const lnVolta=L.polyline([ll[ll.length-1],[vHome.lat,vHome.lon]],{color:'#059669',weight:2,opacity:.7,dashArray:'6,4'}).addTo(mapaInst);
+    const first=visitas[0],last=visitas[visitas.length-1];
+    const lnIda=L.polyline([[vHome.lat,vHome.lon],[first.lat,first.lon]],{color:'#059669',weight:2,opacity:.7,dashArray:'6,4'}).addTo(mapaInst);
+    const lnVolta=L.polyline([[last.lat,last.lon],[vHome.lat,vHome.lon]],{color:'#059669',weight:2,opacity:.7,dashArray:'6,4'}).addTo(mapaInst);
     _ml.push(lnIda,lnVolta);
-    ll.push([vHome.lat,vHome.lon]);
+    bounds.push([vHome.lat,vHome.lon]);
   }
-  if(ll.length>1){const ln=L.polyline(ll.slice(0,ll.length-(vHome&&ll.length?1:0)),{color:'#2B2FA8',weight:3,opacity:.65,dashArray:'8,5'}).addTo(mapaInst);_ml.push(ln);}
-  if(ll.length)mapaInst.fitBounds(ll,{padding:[40,40]});
+
+  if(bounds.length)mapaInst.fitBounds(bounds,{padding:[40,40]});
 }
 
 // ── AGENDAMENTO ───────────────────────────────────────────────
