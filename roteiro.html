@@ -578,7 +578,7 @@ function gerarRoteiro(){
         const d=haversine(mcent.lat,mcent.lon,munCentro[m2].lat,munCentro[m2].lon);
         if(d<distMin){distMin=d;viz=m2;}
       });
-      if(viz&&distMin<80){
+      if(viz&&distMin<40){  // máx 40km entre municípios do mesmo dia
         munAssignado.add(viz);
         const merged=[...cs,...porMun[viz]];
         // Tenta adicionar um 3º município vizinho se ainda insuficiente
@@ -588,7 +588,7 @@ function gerarRoteiro(){
           munsSorted.forEach(m3=>{
             if(munAssignado.has(m3))return;
             const d=haversine(mc2.lat,mc2.lon,munCentro[m3].lat,munCentro[m3].lon);
-            if(d<distMin2&&d<60){distMin2=d;viz2=m3;}
+            if(d<distMin2&&d<30){distMin2=d;viz2=m3;}  // 3º vizinho: máx 30km
           });
           if(viz2){munAssignado.add(viz2);merged.push(...porMun[viz2]);}
         }
@@ -673,7 +673,10 @@ function gerarRoteiro(){
   // ── PASSO 8: Constrói slots com horários ─────────────────────
   futuros.forEach((data,di)=>{
     const agsFix=agendamentos.filter(a=>a.data===data).sort((a,b)=>h2m(a.hora)-h2m(b.hora));
-    const clientesOrdenados=nnSort(gruposUnicos[di],centro.lat,centro.lon);
+    // NN começa do centróide do próprio cluster (não da carteira inteira)
+    // → evita puxar cliente isolado como ponto de partida
+    const cc=clusterCentro(gruposUnicos[di]);
+    const clientesOrdenados=nnSort(gruposUnicos[di],cc.lat,cc.lon);
 
     const slots=[];
     let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
