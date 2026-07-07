@@ -686,20 +686,27 @@ function gerarRoteiro(){
     }
   });
   let totalAtual=gruposUnicos.reduce((s,g)=>s+g.length,0);
-  const rankRepDisp=[...rankRep].filter(c=>!usadosNaClusters.has(c.cod_cliente+'_'+c.loja));
-  let repIdx=0;
-  while(totalAtual<CFG.metaVis&&repIdx<rankRepDisp.length){
+  // Pool de candidatos a revisita ordenado por scoreRep (mais importantes primeiro)
+  // Cada iteração encontra o MELHOR candidato válido para o dia mais vazio
+  // — sem avançar índice cegamente, que esgotava o pool sem atingir a meta
+  while(totalAtual<CFG.metaVis){
     let diBest=0;
     futuros.forEach((d,di)=>{if(gruposUnicos[di].length<gruposUnicos[diBest].length&&gruposUnicos[di].length<MAX)diBest=di;});
     if(gruposUnicos[diBest].length>=MAX)break;
-    const c=rankRepDisp[repIdx];
-    const id=c.cod_cliente+'_'+c.loja;
-    // Garante gap ≥ 14 dias também neste loop
-    if(diaOriginalCluster[id]===undefined||diBest-diaOriginalCluster[id]>=MIN_GAP_P3){
-      gruposUnicos[diBest].push({...c,_rep:true});
-      totalAtual++;
-    }
-    repIdx++;
+    // Candidatos: não usados, com gap ≥ 14 dias em relação à visita original no mesmo mês
+    const pool=rankRep.filter(c=>{
+      const id=c.cod_cliente+'_'+c.loja;
+      if(usadosNaClusters.has(id))return false;
+      if(diaOriginalCluster[id]!==undefined&&diBest-diaOriginalCluster[id]<MIN_GAP_P3)return false;
+      return true;
+    });
+    if(!pool.length)break; // nenhum candidato válido — impossível atingir meta com as restrições
+    // Escolhe o de maior scoreRep
+    const best=pool.reduce((a,b)=>scoreRep(b)>scoreRep(a)?b:a);
+    const bestId=best.cod_cliente+'_'+best.loja;
+    usadosNaClusters.add(bestId);
+    gruposUnicos[diBest].push({...best,_rep:true});
+    totalAtual++;
   }
 
   // ── PASSO 8: Constrói slots com horários ─────────────────────
@@ -858,14 +865,16 @@ function gerarRoteiro(){
     visSlots.forEach(s=>{const m=(s.municipio||'').trim().toUpperCase();cntMun[m]=(cntMun[m]||0)+1;});
     const munDia=Object.entries(cntMun).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     for(const {curFim:cf,loc} of pontos){
-      // índice do dia atual dentro de futuros (para cálculo de gap)
-      const idxDiaAtual=futuros.indexOf(futuros.find(d=>novoRot[d]===slots));
+      // índice do dia atual dentro de futuros (para cálculo de gap mínimo de visita)
+      const _diaKey=Object.keys(novoRot).find(d=>novoRot[d]===slots);
+      const idxDiaAtual=_diaKey?futuros.indexOf(_diaKey):-1;
       let pool=[...rankRep].filter(c=>{
         const id=c.cod_cliente+'_'+c.loja;
         if(idsNoDia.has(id))return false;
         if(opts.globalUsed&&opts.globalUsed.has(id))return false; // já revisitado em outro dia
         // Espaçamento mínimo: revisita só permitida ≥ 14 dias após a visita original
-        if(diaOriginal[id]!==undefined&&idxDiaAtual-diaOriginal[id]<MIN_GAP_DIAS)return false;
+        // idxDiaAtual==-1 significa dia não encontrado → não aplica restrição
+        if(idxDiaAtual>=0&&diaOriginal[id]!==undefined&&idxDiaAtual-diaOriginal[id]<MIN_GAP_DIAS)return false;
         if(maxGeoKm&&cLat!==null){ // restrição geográfica: apenas clientes próximos ao cluster do dia
           const dkm=haversine(cLat,cLon,+c.latitude,+c.longitude);
           if(dkm>maxGeoKm)return false;
