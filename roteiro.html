@@ -678,20 +678,29 @@ function gerarRoteiro(){
     // NN começa do centróide do próprio cluster (não da carteira inteira)
     // → evita puxar cliente isolado como ponto de partida
     const cc=clusterCentro(gruposUnicos[di]);
+    // Município dominante do cluster do dia
+    function munDominante(grupo){
+      const cnt={};
+      grupo.forEach(c=>{const m=(c.municipio||'').trim().toUpperCase();cnt[m]=(cnt[m]||0)+1;});
+      return Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+    }
+    const munDom=munDominante(gruposUnicos[di]);
     // Filtro de desvio: remove clientes que criam "V" no trajeto.
-    // Detour = dist(prev→c) + dist(c→next) − dist(prev→next).
-    // Se detour > maxDesvioKm, o cliente sai do dia; PASSO A preenche com revisita próxima.
+    // Threshold duplo: 35km dentro do mesmo município; 15km para clientes de outro município.
+    // Cliente de município diferente que desvia >15km é removido — PASSO A recoloca revisita local.
     function filtrarDesvios(lista){
       if(lista.length<=2)return lista;
       let changed=true;
       while(changed){
         changed=false;
         for(let i=1;i<lista.length-1;i++){
-          const prev=lista[i-1], cur=lista[i], nxt=lista[i+1];
-          const desvio=haversine(+prev.latitude,+prev.longitude,+cur.latitude,+cur.longitude)
-                      +haversine(+cur.latitude,+cur.longitude,+nxt.latitude,+nxt.longitude)
+          const prev=lista[i-1],cur2=lista[i],nxt=lista[i+1];
+          const desvio=haversine(+prev.latitude,+prev.longitude,+cur2.latitude,+cur2.longitude)
+                      +haversine(+cur2.latitude,+cur2.longitude,+nxt.latitude,+nxt.longitude)
                       -haversine(+prev.latitude,+prev.longitude,+nxt.latitude,+nxt.longitude);
-          if(desvio>CFG.maxDesvioKm){lista.splice(i,1);changed=true;break;}
+          const mismatch=(cur2.municipio||'').trim().toUpperCase()!==munDom;
+          const limiar=mismatch?CFG.maxDesvioKm*0.4:CFG.maxDesvioKm;
+          if(desvio>limiar){lista.splice(i,1);changed=true;break;}
         }
         // Verifica também o último cliente (desvio em relação à casa)
         if(!changed&&lista.length>=2){
@@ -699,7 +708,9 @@ function gerarRoteiro(){
           const desvioFim=haversine(+pen.latitude,+pen.longitude,+ult.latitude,+ult.longitude)
                          +haversine(+ult.latitude,+ult.longitude,centro.lat,centro.lon)
                          -haversine(+pen.latitude,+pen.longitude,centro.lat,centro.lon);
-          if(desvioFim>CFG.maxDesvioKm){lista.splice(lista.length-1,1);changed=true;}
+          const mismatch=(ult.municipio||'').trim().toUpperCase()!==munDom;
+          const limiar=mismatch?CFG.maxDesvioKm*0.4:CFG.maxDesvioKm;
+          if(desvioFim>limiar){lista.splice(lista.length-1,1);changed=true;}
         }
       }
       return lista;
@@ -780,8 +791,18 @@ function gerarRoteiro(){
     if(slots.filter(s=>s.tipo==='visita').length>=limiteDia)return false;
     const pontos=melhorEncaixe(slots);
     if(!pontos)return false;
+    // Município dominante do dia (para preferir revisitas da mesma cidade)
+    const visSlots=slots.filter(s=>s.municipio&&s.tipo==='visita');
+    const cntMun={};
+    visSlots.forEach(s=>{const m=(s.municipio||'').trim().toUpperCase();cntMun[m]=(cntMun[m]||0)+1;});
+    const munDia=Object.entries(cntMun).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     for(const {curFim:cf,loc} of pontos){
-      const candidatos=[...rankRep].sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
+      const porDist=[...rankRep].sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
+      // Prioridade: mesma cidade → outras cidades
+      const candidatos=munDia
+        ?[...porDist.filter(c=>(c.municipio||'').trim().toUpperCase()===munDia),
+           ...porDist.filter(c=>(c.municipio||'').trim().toUpperCase()!==munDia)]
+        :porDist;
       for(const c of candidatos){
         const travel=travelMin(loc,{latitude:c.latitude,longitude:c.longitude});
         const dur=duracaoCliente(c);
