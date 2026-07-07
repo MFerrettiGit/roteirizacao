@@ -383,7 +383,7 @@ const CFG = {
   velKmH: 35, parking: 8,
   pros: 45,
   metaVis: 100, metaH: 100, metaProsp: 2, maxProsp: 4,
-  minPorDia: 5, maxPorDia: 8,
+  minPorDia: 5, maxPorDia: 8, maxDesvioKm: 35,
   maxAporDia: 2,
   tempoClasse: {A:90, B:60, C:45, '':30},
 };
@@ -678,7 +678,33 @@ function gerarRoteiro(){
     // NN começa do centróide do próprio cluster (não da carteira inteira)
     // → evita puxar cliente isolado como ponto de partida
     const cc=clusterCentro(gruposUnicos[di]);
-    const clientesOrdenados=nnSort(gruposUnicos[di],cc.lat,cc.lon);
+    // Filtro de desvio: remove clientes que criam "V" no trajeto.
+    // Detour = dist(prev→c) + dist(c→next) − dist(prev→next).
+    // Se detour > maxDesvioKm, o cliente sai do dia; PASSO A preenche com revisita próxima.
+    function filtrarDesvios(lista){
+      if(lista.length<=2)return lista;
+      let changed=true;
+      while(changed){
+        changed=false;
+        for(let i=1;i<lista.length-1;i++){
+          const prev=lista[i-1], cur=lista[i], nxt=lista[i+1];
+          const desvio=haversine(+prev.latitude,+prev.longitude,+cur.latitude,+cur.longitude)
+                      +haversine(+cur.latitude,+cur.longitude,+nxt.latitude,+nxt.longitude)
+                      -haversine(+prev.latitude,+prev.longitude,+nxt.latitude,+nxt.longitude);
+          if(desvio>CFG.maxDesvioKm){lista.splice(i,1);changed=true;break;}
+        }
+        // Verifica também o último cliente (desvio em relação à casa)
+        if(!changed&&lista.length>=2){
+          const pen=lista[lista.length-2],ult=lista[lista.length-1];
+          const desvioFim=haversine(+pen.latitude,+pen.longitude,+ult.latitude,+ult.longitude)
+                         +haversine(+ult.latitude,+ult.longitude,centro.lat,centro.lon)
+                         -haversine(+pen.latitude,+pen.longitude,centro.lat,centro.lon);
+          if(desvioFim>CFG.maxDesvioKm){lista.splice(lista.length-1,1);changed=true;}
+        }
+      }
+      return lista;
+    }
+    const clientesOrdenados=filtrarDesvios(nnSort(gruposUnicos[di],cc.lat,cc.lon));
 
     const slots=[];
     let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
