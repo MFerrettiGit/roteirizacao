@@ -65,4 +65,28 @@ WHERE SA1.D_E_L_E_T_ = ' '
         V.FAT_12M > 0
      OR LTRIM(RTRIM(SA1.A1_CLASVEN)) IN ('A','B','C')
   )
+  -- Excluir setores fora da cobertura da roteirização:
+  -- Centro Oeste (Marília, Araçatuba, Bauru, etc.), excluídos, M. Ferretti e outros sem vendedor externo
+  AND LTRIM(RTRIM(SA3.A3_NREDUZ)) NOT IN (
+      'EXCLUIDOS',
+      'M. FERRETTI',
+      'CENTRO OESTE',
+      'CENTROOESTE/SET17',
+      'C.OESTE\MAR18',
+      'MARILIA',
+      'ARACATUBA',
+      'AMERICANA',
+      'AVARE',
+      'BAURU',
+      'FERNANDOPOLIS',
+      'PRES.PRUDENTE',
+      'RIO CLARO',
+      'RIO PRETO',
+      'JABOTICABAL',
+      'NORDESTE',
+      'CONTAS CHAVES CPS',
+      'GERENCIA INTERIOR SP',
+      'SUDESTE/NOV20',
+      'SUDESTE/OUT17'
+  )
 ORDER BY SA3.A3_COD, ISNULL(V.FAT_12M, 0) DESC
