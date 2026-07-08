@@ -613,6 +613,11 @@ function gerarRoteiro(){
     }
   });
 
+  // Cidades com dia dedicado: têm ≥ MIN clientes e ganham dia próprio no PASSO 3.
+  // Não devem aparecer como revisita/filler em dias de outras cidades.
+  const cidadesDedicadas=new Set();
+  Object.entries(porMun).forEach(([m,cs])=>{if(cs.length>=MIN)cidadesDedicadas.add(m.trim().toUpperCase());});
+
   // ── PASSO 4: Ordena clusters como rota cidade-em-cidade (NN) ─
   function clusterCentro(cl){
     return{lat:cl.reduce((s,c)=>s+(+c.latitude),0)/cl.length,lon:cl.reduce((s,c)=>s+(+c.longitude),0)/cl.length};
@@ -703,6 +708,10 @@ function gerarRoteiro(){
   const MIN_GAP_P3=10; // ~14 dias corridos convertido em dias úteis
   futuros.forEach((d,di)=>{
     const grupo=gruposUnicos[di];
+    // Município dominante do dia: para bloquear revisitas de cidades dedicadas em dias de outras cidades
+    const _cntMunP7={};
+    grupo.forEach(c=>{const m=(c.municipio||'').trim().toUpperCase();_cntMunP7[m]=(_cntMunP7[m]||0)+1;});
+    const munDomP7=Object.entries(_cntMunP7).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     while(grupo.length<MIN){
       const cg=centroGrupo(grupo);
       const candidatos=rankRep.filter(c=>{
@@ -710,6 +719,9 @@ function gerarRoteiro(){
         if(usadosNaClusters.has(id))return false;
         // Gap simétrico: bloqueia revisita se distância (em qualquer direção) for < MIN_GAP_P3
         if(diaOriginalCluster[id]!==undefined&&Math.abs(di-diaOriginalCluster[id])<MIN_GAP_P3)return false;
+        // Não inserir cliente de cidade dedicada em dia de outra cidade
+        const munC=(c.municipio||'').trim().toUpperCase();
+        if(cidadesDedicadas.has(munC)&&munC!==munDomP7)return false;
         return true;
       });
       if(!candidatos.length)break;
@@ -927,6 +939,9 @@ function gerarRoteiro(){
         if(maxGeoKm&&cLat!==null){
           if(haversine(cLat,cLon,+c.latitude,+c.longitude)>maxGeoKm)return false;
         }
+        // Não inserir cliente de cidade dedicada em dia de outra cidade
+        const munC=(c.municipio||'').trim().toUpperCase();
+        if(cidadesDedicadas.has(munC)&&munDia&&munC!==munDia)return false;
         return true;
       });
       pool.sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
