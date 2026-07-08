@@ -866,35 +866,36 @@ function gerarRoteiro(){
     slots.length=0; byHora.forEach(s=>slots.push(s));
   };
 
-  // PASSO A: garante mínimo de visitas por dia em todos os dias
-  // (cidade pequena com 2 clientes precisa de complemento geográfico próximo)
-  for(const minGap of [14,10,7,5,3,1]){
-    let avancou=true;
-    while(avancou){
-      avancou=false;
-      for(const data of futuros){
-        const slots=novoRot[data];
-        if(!slots)continue;
-        if(slots.filter(s=>s.tipo==='visita').length>=MIN)continue;
-        if(tentaInserir(slots,CFG.maxPorDia,{minGap})){totalVis++;avancou=true;}
-      }
-    }
-  }
+  // PASSO A removido: não força mínimo de 5 em dias de cidades pequenas.
+  // Dia com 2-3 clientes originais fica com 2-3 visitas — é geograficamente correto.
+  // O PASSO B garante a meta 100 enchendo os últimos dias com revisitas dos melhores clientes.
 
-  // PASSO B: completa meta 100 preenchendo do ÚLTIMO dia para o primeiro
-  // → revisitas extras ficam concentradas no fim do mês
-  for(const [geoKm,minGap] of [[40,14],[null,14],[null,10],[null,7],[null,5],[null,3],[null,1]]){
-    let avancou=true;
-    while(totalVis<CFG.metaVis && avancou){
-      avancou=false;
-      for(const data of [...futuros].reverse()){
-        if(totalVis>=CFG.metaVis)break;
-        const slots=novoRot[data];
-        if(!slots)continue;
-        if(tentaInserir(slots,CFG.maxPorDia,{geoKm,minGap})){
-          totalVis++;avancou=true;
-          reordenar(slots);
-        }
+  // PASSO B: completa meta 100 com revisitas concentradas no fim do mês.
+  // Estratégia em 3 camadas — cada uma abre mais dias se a anterior não fechar 100:
+  //   1ª: só última semana (últimos 6 dias úteis)
+  //   2ª: segunda quinzena (últimos 10 dias úteis)
+  //   3ª: qualquer dia (fallback final)
+  const passosB=[
+    {startIdx:Math.max(0,futuros.length-6), geoKm:40,  minGap:14},
+    {startIdx:Math.max(0,futuros.length-6), geoKm:null, minGap:14},
+    {startIdx:Math.max(0,futuros.length-6), geoKm:null, minGap:7},
+    {startIdx:Math.max(0,futuros.length-10),geoKm:null, minGap:14},
+    {startIdx:Math.max(0,futuros.length-10),geoKm:null, minGap:7},
+    {startIdx:0,                             geoKm:null, minGap:14},
+    {startIdx:0,                             geoKm:null, minGap:7},
+    {startIdx:0,                             geoKm:null, minGap:3},
+    {startIdx:0,                             geoKm:null, minGap:1},
+  ];
+  for(const {startIdx,geoKm,minGap} of passosB){
+    if(totalVis>=CFG.metaVis)break;
+    for(const data of [...futuros].slice(startIdx).reverse()){
+      if(totalVis>=CFG.metaVis)break;
+      const slots=novoRot[data];
+      if(!slots)continue;
+      let inseriu=true;
+      while(inseriu&&totalVis<CFG.metaVis){
+        inseriu=tentaInserir(slots,CFG.maxPorDia,{geoKm,minGap});
+        if(inseriu){totalVis++;reordenar(slots);}
       }
     }
   }
