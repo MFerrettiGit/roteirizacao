@@ -613,68 +613,34 @@ function gerarRoteiro(){
     }
   });
 
-  // Cidades com dia dedicado: têm ≥ MIN clientes e ganham dia próprio no PASSO 3.
-  // Não devem aparecer como revisita/filler em dias de outras cidades.
-  const cidadesDedicadas=new Set();
-  Object.entries(porMun).forEach(([m,cs])=>{if(cs.length>=MIN)cidadesDedicadas.add(m.trim().toUpperCase());});
-
   // ── PASSO 4: Ordena clusters como rota cidade-em-cidade (NN) ─
   function clusterCentro(cl){
     return{lat:cl.reduce((s,c)=>s+(+c.latitude),0)/cl.length,lon:cl.reduce((s,c)=>s+(+c.longitude),0)/cl.length};
   }
-  // Dias "próximos de casa" reservados para a última semana do mês
-  // Os N clusters mais próximos do endereço residencial ficam nos últimos N dias úteis
-  const DIAS_PROXIMOS_FIM=5;
-  function nnChain(lista,startLat,startLon){
-    const result=[],rem2=[...lista];
-    let cur2={lat:startLat,lon:startLon};
-    while(rem2.length){
-      const best=rem2.reduce((b,cl)=>haversine(cur2.lat,cur2.lon,clusterCentro(cl).lat,clusterCentro(cl).lon)<haversine(cur2.lat,cur2.lon,clusterCentro(b).lat,clusterCentro(b).lon)?cl:b);
-      result.push(best); cur2=clusterCentro(best); rem2.splice(rem2.indexOf(best),1);
-    }
-    return result;
-  }
-  // Separa os N mais próximos de casa para reservar na última semana
-  const nFim=Math.min(DIAS_PROXIMOS_FIM,clusters.length);
-  const clustersComDist=clusters.map(cl=>({cl,dist:haversine(centro.lat,centro.lon,clusterCentro(cl).lat,clusterCentro(cl).lon)}));
-  clustersComDist.sort((a,b)=>a.dist-b.dist);
-  const clustersUltimos=clustersComDist.slice(0,nFim).map(x=>x.cl);
-  const clustersPrimeiros=clustersComDist.slice(nFim).map(x=>x.cl);
-  // NN independente em cada grupo
-  const ordenados=[
-    ...nnChain(clustersPrimeiros,centro.lat,centro.lon),
-    ...nnChain(clustersUltimos,centro.lat,centro.lon)
-  ];
+  const ordenados=[];
+  {let rem=[...clusters],cur2=centro;
+  while(rem.length){
+    const best=rem.reduce((b,cl)=>haversine(cur2.lat,cur2.lon,clusterCentro(cl).lat,clusterCentro(cl).lon)<haversine(cur2.lat,cur2.lon,clusterCentro(b).lat,clusterCentro(b).lon)?cl:b);
+    ordenados.push(best); cur2=clusterCentro(best); rem=rem.filter(c=>c!==best);
+  }}
 
   // ── PASSO 5: Distribui clusters pelos dias úteis ─────────────
+  // 1 cluster por dia; clusters extras vão ao dia mais próximo com espaço (sem limite de distância —
+  // o filtro de rota dentro de cada dia (filtrarPorRota) cuida de remover desvios ruins)
   const gruposUnicos=futuros.map(()=>[]);
   ordenados.forEach((cl,i)=>{
     if(i<futuros.length){
       gruposUnicos[i]=cl.map(c=>({...c,_rep:false}));
     } else {
-      // Clusters extras: adiciona no dia mais próximo com espaço
-      // Limite de 50km: evita misturar cidades em direções opostas (ex: Restinga+PatrocínioPaulista)
       const cc=clusterCentro(cl);
-      const MAX_OVERFLOW_KM=50;
-      let bestDi=-1,bestScore=Infinity;
+      let bestDi=0,bestScore=Infinity;
       futuros.forEach((d,di)=>{
         if(gruposUnicos[di].length>=MAX)return;
         const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
-        const dist=haversine(cc.lat,cc.lon,gc.lat,gc.lon);
-        if(dist>MAX_OVERFLOW_KM)return; // não mistura dias distantes demais
-        const score=dist+(gruposUnicos[di].length/MAX)*50;
+        const score=haversine(cc.lat,cc.lon,gc.lat,gc.lon)+(gruposUnicos[di].length/MAX)*50;
         if(score<bestScore){bestScore=score;bestDi=di;}
       });
-      // Fallback: se nenhum dia está dentro do raio, usa o mais próximo sem restrição
-      if(bestDi===-1){
-        futuros.forEach((d,di)=>{
-          if(gruposUnicos[di].length>=MAX)return;
-          const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
-          const score=haversine(cc.lat,cc.lon,gc.lat,gc.lon)+(gruposUnicos[di].length/MAX)*50;
-          if(score<bestScore){bestScore=score;bestDi=di;}
-        });
-      }
-      if(bestDi>=0)cl.forEach(c=>{if(gruposUnicos[bestDi].length<MAX)gruposUnicos[bestDi].push({...c,_rep:false});});
+      cl.forEach(c=>{if(gruposUnicos[bestDi].length<MAX)gruposUnicos[bestDi].push({...c,_rep:false});});
     }
   });
 
@@ -692,73 +658,9 @@ function gerarRoteiro(){
     return rota;
   }
 
-  // ── PASSO 7: Repetições para atingir mínimo/dia e meta ───────
-  function centroGrupo(grupo){
-    if(!grupo.length)return centro;
-    return{lat:grupo.reduce((s,c)=>s+(+c.latitude),0)/grupo.length,lon:grupo.reduce((s,c)=>s+(+c.longitude),0)/grupo.length};
-  }
-  // usadosNaClusters: rastreia quais clientes já foram adicionados como _rep:true
-  // Inicializa VAZIO — clientes com visita original ainda podem receber revisita (gap ≥14d)
-  // NÃO incluir os originais aqui; isso esvaziaria o pool de candidatos a revisita
-  const usadosNaClusters=new Set();
-  // diaOriginalCluster: clienteId → índice do cluster (dia) onde ocorre a visita original
-  // Usado para garantir gap mínimo de 14 dias entre visita e revisita já no PASSO 3
-  const diaOriginalCluster={};
-  gruposUnicos.forEach((g,di)=>g.filter(c=>!c._rep).forEach(c=>{diaOriginalCluster[c.cod_cliente+'_'+c.loja]=di;}));
-  const MIN_GAP_P3=10; // ~14 dias corridos convertido em dias úteis
-  futuros.forEach((d,di)=>{
-    const grupo=gruposUnicos[di];
-    // Município dominante do dia: para bloquear revisitas de cidades dedicadas em dias de outras cidades
-    const _cntMunP7={};
-    grupo.forEach(c=>{const m=(c.municipio||'').trim().toUpperCase();_cntMunP7[m]=(_cntMunP7[m]||0)+1;});
-    const munDomP7=Object.entries(_cntMunP7).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
-    while(grupo.length<MIN){
-      const cg=centroGrupo(grupo);
-      const candidatos=rankRep.filter(c=>{
-        const id=c.cod_cliente+'_'+c.loja;
-        if(usadosNaClusters.has(id))return false;
-        // Gap simétrico: bloqueia revisita se distância (em qualquer direção) for < MIN_GAP_P3
-        if(diaOriginalCluster[id]!==undefined&&Math.abs(di-diaOriginalCluster[id])<MIN_GAP_P3)return false;
-        // Não inserir cliente de cidade dedicada em dia de outra cidade
-        const munC=(c.municipio||'').trim().toUpperCase();
-        if(cidadesDedicadas.has(munC)&&munC!==munDomP7)return false;
-        return true;
-      });
-      if(!candidatos.length)break;
-      const top20=candidatos.slice(0,20);
-      const best=top20.reduce((b,c)=>haversine(cg.lat,cg.lon,+c.latitude,+c.longitude)<haversine(cg.lat,cg.lon,+b.latitude,+b.longitude)?c:b);
-      usadosNaClusters.add(best.cod_cliente+'_'+best.loja);
-      grupo.push({...best,_rep:true});
-    }
-  });
-  let totalAtual=gruposUnicos.reduce((s,g)=>s+g.length,0);
-  // Distribui revisitas até atingir metaVis.
-  // Estratégia: para cada slot vago, varre TODOS os dias (do mais vazio ao mais cheio)
-  // e tenta encaixar o melhor candidato com gap ≥ 14 dias.
-  // Dias cedo (índice < 14) não aceitam revisitas de clientes já visitados — pulamos para o próximo.
-  while(totalAtual<CFG.metaVis){
-    // Ordena dias: menos clientes primeiro, desempata por índice decrescente (revisitas nos últimos dias)
-    const diasOrdenados=futuros.map((_,i)=>i).filter(di=>gruposUnicos[di].length<MAX)
-      .sort((a,b)=>gruposUnicos[a].length-gruposUnicos[b].length||b-a);
-    let inseriu=false;
-    for(const di of diasOrdenados){
-      const pool=rankRep.filter(c=>{
-        const id=c.cod_cliente+'_'+c.loja;
-        if(usadosNaClusters.has(id))return false;
-        // Gap simétrico: bloqueia revisita se distância (em qualquer direção) for < MIN_GAP_P3
-        if(diaOriginalCluster[id]!==undefined&&Math.abs(di-diaOriginalCluster[id])<MIN_GAP_P3)return false;
-        return true;
-      });
-      if(!pool.length)continue; // esse dia não tem candidatos válidos — tenta o próximo
-      const best=pool.reduce((a,b)=>scoreRep(b)>scoreRep(a)?b:a);
-      usadosNaClusters.add(best.cod_cliente+'_'+best.loja);
-      gruposUnicos[di].push({...best,_rep:true});
-      totalAtual++;
-      inseriu=true;
-      break;
-    }
-    if(!inseriu)break; // nenhum dia aceita mais revisitas — meta inalcançável com as restrições atuais
-  }
+  // ── PASSO 7: (removido) — revisitas não entram no pré-slot ─────
+  // A fase de revisitas acontece DEPOIS que todos os clientes foram visitados uma vez,
+  // via PASSO A e PASSO B (pós-slot), usando lógica de rota geográfica simples.
 
   // ── PASSO 8: Constrói slots com horários ─────────────────────
   let prosContador=0; // compartilhado entre todos os dias do mês
@@ -806,13 +708,8 @@ function gerarRoteiro(){
     // Dedup: mesmo cliente pode ter entrado duas vezes no cluster via PASSO 3 — remover duplicatas
     const _vistosCluster=new Set();
     const _clusterDedup=gruposUnicos[di].filter(c=>{const id=c.cod_cliente+'_'+c.loja;if(_vistosCluster.has(id))return false;_vistosCluster.add(id);return true;});
-    // Centróide do núcleo original (sem revisitas): referência geográfica do dia
-    const _cliOrig=_clusterDedup.filter(c=>!c._rep);
-    const ccOrig=_cliOrig.length?{lat:_cliOrig.reduce((s,c)=>s+(+c.latitude),0)/_cliOrig.length,lon:_cliOrig.reduce((s,c)=>s+(+c.longitude),0)/_cliOrig.length}:cc;
-    // Remove clientes que estão a mais de 50km do núcleo original — vieram de overflow ou revisitas distantes
-    const MAX_RAIO_DIA=50;
-    const _semOutliers=_clusterDedup.filter(c=>haversine(ccOrig.lat,ccOrig.lon,+c.latitude,+c.longitude)<=MAX_RAIO_DIA);
-    const clientesOrdenados=filtrarPorRota(nnSort(_semOutliers.length>=2?_semOutliers:_clusterDedup,cc.lat,cc.lon));
+    // NN + filtro de rota: remove clientes que criam "V" no trajeto (desvio > maxDesvioKm)
+    const clientesOrdenados=filtrarPorRota(nnSort(_clusterDedup,cc.lat,cc.lon));
 
     const slots=[];
     let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
@@ -939,9 +836,6 @@ function gerarRoteiro(){
         if(maxGeoKm&&cLat!==null){
           if(haversine(cLat,cLon,+c.latitude,+c.longitude)>maxGeoKm)return false;
         }
-        // Não inserir cliente de cidade dedicada em dia de outra cidade
-        const munC=(c.municipio||'').trim().toUpperCase();
-        if(cidadesDedicadas.has(munC)&&munDia&&munC!==munDia)return false;
         return true;
       });
       pool.sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
@@ -967,37 +861,47 @@ function gerarRoteiro(){
     return false;
   }
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  // PASSO A: garantir mínimo 5 visitas/dia — sem exceção (relaxa gap progressivamente)
+
+  // Fase 1 termina no último dia que tem visita original (não-revisita).
+  // Revisitas só entram a partir do dia seguinte — carteira inteira primeiro.
+  const ultimoDiaOriginal=futuros.reduce((last,data,di)=>{
+    const slots=novoRot[data]||[];
+    return slots.some(s=>s.tipo==='visita'&&!s.rep)?di:last;
+  },-1);
+  const reordenar=(slots)=>{
+    const byHora=[...slots].sort((a,b)=>a.tipo==='almoco'?0:a.horaIni.localeCompare(b.horaIni));
+    slots.length=0; byHora.forEach(s=>slots.push(s));
+  };
+
+  // PASSO A: completa dias da fase de revisitas que ficaram abaixo do mínimo
+  // (dias da fase 1 podem ter menos visitas — é normal para cidades pequenas)
   for(const minGap of [14,10,7,5,3,1]){
     let avancou=true;
     while(avancou){
       avancou=false;
-      for(const data of futuros){
+      futuros.forEach((data,di)=>{
+        if(di<=ultimoDiaOriginal)return; // fase 1: não força revisitas
         const slots=novoRot[data];
-        if(!slots)continue;
-        if(slots.filter(s=>s.tipo==='visita').length>=MIN)continue;
+        if(!slots)return;
+        if(slots.filter(s=>s.tipo==='visita').length>=MIN)return;
         if(tentaInserir(slots,CFG.maxPorDia,{minGap})){totalVis++;avancou=true;}
-      }
+      });
     }
   }
-  // PASSO B: completa meta 100 — revisitas preferencialmente nos últimos dias
-  {
-    const reordenar=(slots)=>{
-      const byHora=[...slots].sort((a,b)=>a.tipo==='almoco'?0:a.horaIni.localeCompare(b.horaIni));
-      slots.length=0; byHora.forEach(s=>slots.push(s));
-    };
-    for(const [geoKm,minGap] of [[40,14],[null,14],[null,10],[null,7],[null,5],[null,3],[null,1]]){
-      let avancou=true;
-      while(totalVis<CFG.metaVis && avancou){
-        avancou=false;
-        for(const data of [...futuros].reverse()){
-          if(totalVis>=CFG.metaVis)break;
-          const slots=novoRot[data];
-          if(!slots)continue;
-          if(tentaInserir(slots,CFG.maxPorDia,{geoKm,minGap})){
-            totalVis++;avancou=true;
-            reordenar(slots);
-          }
+
+  // PASSO B: completa meta 100 com revisitas — do último dia para o primeiro da fase 2
+  for(const [geoKm,minGap] of [[40,14],[null,14],[null,10],[null,7],[null,5],[null,3],[null,1]]){
+    let avancou=true;
+    while(totalVis<CFG.metaVis && avancou){
+      avancou=false;
+      const diasRevisita=[...futuros].reverse().filter((_,ri)=>futuros.length-1-ri>ultimoDiaOriginal);
+      for(const data of diasRevisita){
+        if(totalVis>=CFG.metaVis)break;
+        const slots=novoRot[data];
+        if(!slots)continue;
+        if(tentaInserir(slots,CFG.maxPorDia,{geoKm,minGap})){
+          totalVis++;avancou=true;
+          reordenar(slots);
         }
       }
     }
