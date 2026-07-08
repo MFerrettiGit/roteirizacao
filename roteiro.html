@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -481,641 +481,333 @@ function kmDia(slots){const pts=slots.filter(s=>s.lat&&s.lon);let km=0;for(let i
 
 // ── PERSISTÊNCIA ─────────────────────────────────────────────
 function chv(t){const ym=mesSel.toISOString().slice(0,7).replace('-','');return`fr_rot_${t}_${COD}_${ym}`;}
-function salvar(){localStorage.setItem(chv('r'),JSON.stringify(roteiro));localStorage.setItem(chv('ag'),JSON.stringify(agendamentos));}
+function salvar(){
+  // Exclui dias auto-gerados (simulados) da persistência — são recriados a cada chamada
+  const toSave={};
+  Object.entries(roteiro).forEach(([d,slots])=>{if(slots&&!slots._simulado)toSave[d]=slots;});
+  localStorage.setItem(chv('r'),JSON.stringify(toSave));
+  localStorage.setItem(chv('ag'),JSON.stringify(agendamentos));
+}
 function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.getItem(chv('ag'));roteiro=r?JSON.parse(r):{};agendamentos=a?JSON.parse(a):[];}
 
 // ══════════════════════════════════════════════════════════════
-// ALGORITMO — AGRUPAMENTO POR MUNICÍPIO
-// Princípio: um dia eficiente = uma zona geográfica coerente.
-// Clientes da mesma cidade ficam no mesmo dia.
+// ALGORITMO DE ROTEIRIZAÇÃO v2
+// Ciclo 1: todos os clientes 1× (longe→perto da casa do vendedor)
+// Ciclo 2: revisitas (mesma ordem, melhores clientes por score)
+// Mesma cidade → dias consecutivos | MIN 5 / MAX 8 por dia
 // ══════════════════════════════════════════════════════════════
 function gerarRoteiro(){
   const ano=mesSel.getFullYear(), mes=mesSel.getMonth();
   const hojeStr=ds(new Date());
   const util=diasUteis(ano,mes);
-  const futuros=util.filter(d=>d>=hojeStr);
 
-  window._novoRot={}; const novoRot=window._novoRot;
+  window._novoRot={};
+  const novoRot=window._novoRot;
 
-  // Dias passados: preserva o roteiro existente e marca clientes como "já visitados"
-  const visitadosPasado=new Set(); // clienteIds visitados em dias passados
-  const datasVisitaPasado={}; // clienteId → Set<string> de datas passadas
+  // ── 1. Dias passados com rota REAL salva → preserva intocável ─
+  // Dias _simulado (gerados em memória mas não persistidos) são ignorados
+  const histVisitas={}; // clienteId → Set<date> das visitas salvas
   util.filter(d=>d<hojeStr).forEach(d=>{
-    if(roteiro[d]){
-      novoRot[d]=roteiro[d];
-      roteiro[d].filter(s=>s.clienteId&&s.tipo==='visita').forEach(s=>{
-        visitadosPasado.add(s.clienteId);
-        if(!datasVisitaPasado[s.clienteId]) datasVisitaPasado[s.clienteId]=new Set();
-        datasVisitaPasado[s.clienteId].add(d);
+    const slots=roteiro[d];
+    if(slots&&!slots._simulado){
+      novoRot[d]=slots;
+      slots.filter(s=>s.clienteId&&s.tipo==='visita').forEach(s=>{
+        if(!histVisitas[s.clienteId]) histVisitas[s.clienteId]=new Set();
+        histVisitas[s.clienteId].add(d);
       });
     }
   });
 
-  if(!futuros.length||!CLIENTES.length){roteiro=novoRot;salvar();renderTudo();return;}
-
-  // Pool com geo válida
-  const geoRaw=CLIENTES.filter(c=>{
-    const lat=+c.latitude, lon=+c.longitude;
-    return !isNaN(lat)&&!isNaN(lon)&&Math.abs(lat)>0.01&&Math.abs(lon)>0.01;
-  });
-  if(!geoRaw.length){roteiro=novoRot;salvar();renderTudo();return;}
-
-  // Deduplica clientes rede/centralizados
-  const cnpjCount={};
-  geoRaw.forEach(c=>{if(c.cnpj)cnpjCount[c.cnpj]=(cnpjCount[c.cnpj]||0)+1;});
-  const cnpjJaVisto=new Set();
-  const pool=geoRaw.filter(c=>{
-    if(!c.cnpj||cnpjCount[c.cnpj]<=1) return true;
-    if(cnpjJaVisto.has(c.cnpj)) return false;
-    cnpjJaVisto.add(c.cnpj); return true;
-  });
-  pool.forEach(c=>{c._centralizado=c.cnpj&&cnpjCount[c.cnpj]>1;});
-  // Dedup por clienteId (cod_cliente+loja): se o banco tiver o mesmo PDV duplicado, manter só o primeiro
-  const _cidVisto=new Set();
-  const poolDedup=pool.filter(c=>{const id=c.cod_cliente+'_'+c.loja;if(_cidVisto.has(id))return false;_cidVisto.add(id);return true;});
-  // Reatribuir pool → poolDedup nas referências seguintes
-  pool.length=0; poolDedup.forEach(c=>pool.push(c));
-
-  // Marca clientes visitados em dias passados — ficam no pool para não criar dias vazios,
-  // mas em PASSO 8 são pulados se o gap ainda não atingiu MIN_GAP_DIAS dias desde a última visita.
-  pool.forEach(c=>{
+  // ── 2. Pool de clientes (geo válida, sem duplicatas) ─────────
+  const _visto=new Set();
+  const pool=CLIENTES.filter(c=>{
+    const lat=+c.latitude,lon=+c.longitude;
+    if(isNaN(lat)||isNaN(lon)||Math.abs(lat)<0.01||Math.abs(lon)<0.01) return false;
     const id=c.cod_cliente+'_'+c.loja;
-    if(visitadosPasado.has(id)) c._visitadoPasado=true;
+    if(_visto.has(id)) return false;
+    _visto.add(id); return true;
   });
+  if(!pool.length){roteiro=novoRot;salvar();renderTudo();return;}
 
-  // Cidades singleton: ≤ maxClientesSingleton clientes na carteira → prospecção planejada
-  const tamanhoMun={};
-  pool.forEach(c=>{const m=(c.municipio||'').trim().toUpperCase();tamanhoMun[m]=(tamanhoMun[m]||0)+1;});
-  const cidadesSingleton=new Set(Object.entries(tamanhoMun).filter(([,n])=>n<=CFG.maxClientesSingleton).map(([m])=>m));
+  // ── 3. Unifica nomes de municípios truncados (prefixo 10 chars) ─
+  const porMun={};
+  pool.forEach(c=>{
+    const m=(c.municipio||'').trim().toUpperCase()||'?';
+    if(!porMun[m]) porMun[m]=[];
+    porMun[m].push(c);
+  });
+  {
+    const ms=Object.keys(porMun),merged=new Set();
+    ms.forEach(m=>{
+      if(merged.has(m)) return;
+      ms.forEach(m2=>{
+        if(m2===m||merged.has(m2)) return;
+        if(m.slice(0,10)===m2.slice(0,10)){
+          const [keep,drop]=porMun[m].length>=porMun[m2].length?[m,m2]:[m2,m];
+          porMun[keep].push(...porMun[drop]);
+          delete porMun[drop];
+          merged.add(drop);
+        }
+      });
+    });
+  }
+  // Atribui nome canônico a cada cliente
+  Object.entries(porMun).forEach(([m,cls])=>cls.forEach(c=>c._mun=m));
+
+  // ── 4. Casa do vendedor ───────────────────────────────────────
+  const _hv=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
+  const homeLat=_hv?_hv.lat:pool.reduce((s,c)=>s+(+c.latitude),0)/pool.length;
+  const homeLon=_hv?_hv.lon:pool.reduce((s,c)=>s+(+c.longitude),0)/pool.length;
+
+  // ── 5. Blocos por cidade ──────────────────────────────────────
+  const blocos=Object.entries(porMun).map(([mun,cls])=>{
+    const lat=cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length;
+    const lon=cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length;
+    return {mun,clientes:[...cls],lat,lon,distHome:haversine(homeLat,homeLon,lat,lon)};
+  });
+  const tamMun={}; // total de clientes por cidade no pool
+  blocos.forEach(b=>tamMun[b.mun]=b.clientes.length);
 
   const MIN=CFG.minPorDia, MAX=CFG.maxPorDia;
 
-  // Ponto de saída/chegada: endereço residencial do vendedor (se disponível)
-  const vHome=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
-  const centro=vHome
-    ? {lat:vHome.lat, lon:vHome.lon}
-    : {lat:pool.reduce((s,c)=>s+(+c.latitude),0)/pool.length,
-       lon:pool.reduce((s,c)=>s+(+c.longitude),0)/pool.length};
-  centro.latitude=String(centro.lat); centro.longitude=String(centro.lon);
+  // ── 6. Dias a gerar ───────────────────────────────────────────
+  const diasGerar=[
+    ...util.filter(d=>d<hojeStr&&(!roteiro[d]||roteiro[d]._simulado)), // passados sem rota real
+    ...util.filter(d=>d>=hojeStr)               // hoje + futuros
+  ];
+  if(!diasGerar.length){roteiro=novoRot;salvar();renderTudo();return;}
 
-  // Score de prioridade de visita
-  function scoreRep(c){
-    let s=0;
-    const fatM=(c.fat_12m||0)/12, dias=diasSemPedido(c), mix=c.mix_produtos||0, cls=c.classificacao||'';
-    if(fatM>8000)s+=40; else if(fatM>3000)s+=25; else if(fatM>800)s+=12; else if(fatM>0)s+=5;
-    if(dias>=999)s+=30; else if(dias>90)s+=35; else if(dias>60)s+=25; else if(dias>30)s+=15; else if(dias>15)s+=8;
-    if(mix>0&&mix<4)s+=25; else if(mix<8)s+=12; else if(mix<12)s+=5;
-    s+=({A:30,B:20,C:12,'':5}[cls]||5);
-    return s;
+  // Plano: [{data, clientes:[], simulado}]
+  const plano=diasGerar.map(d=>({data:d,clientes:[],simulado:d<hojeStr}));
+
+  // ── 7. CICLO 1: clientes não visitados no mês ─────────────────
+  const jaVisitados=new Set(Object.keys(histVisitas));
+
+  const blocosC1=blocos
+    .map(b=>({...b,clientes:b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja))}))
+    .filter(b=>b.clientes.length>0)
+    .sort((a,b)=>b.distHome-a.distHome); // LONGE → PERTO
+
+  // Cidade B está "no caminho" de home → cidade A (detour ≤ 30%)
+  function noCaminho(aLat,aLon,bLat,bLon){
+    const d=haversine(homeLat,homeLon,aLat,aLon);
+    if(d<1) return false;
+    return haversine(homeLat,homeLon,bLat,bLon)+haversine(bLat,bLon,aLat,aLon)<=d*1.3;
   }
-  const rankRep=[...pool].sort((a,b)=>scoreRep(b)-scoreRep(a));
 
-  // ── PASSO 1: Agrupa por município ────────────────────────────
-  const porMun={};
-  pool.forEach(c=>{
-    const m=(c.municipio||'SEM_MUNICIPIO').trim().toUpperCase();
-    (porMun[m]=porMun[m]||[]).push(c);
-  });
-
-  // ── PASSO 1B: Unifica municípios com nomes truncados pelo ERP ─
-  // ERP trunca nomes a ~15 chars: "SAO JOAQUIM DA" e "SAO JOAQUIM DA BARRA" = mesma cidade.
-  // Critério: prefixo de 10 chars igual → mesmo município (usa o nome do grupo maior).
+  // ── 8. Distribui C1 em dias ──────────────────────────────────
+  // Percorre blocos (longe→perto) preenchendo cada dia até MAX antes de avançar.
+  // Cidades grandes → múltiplos dias consecutivos.
+  // Cidades pequenas → compartilham o dia com a cidade geográfica seguinte.
   {
-    const muns=Object.keys(porMun);
-    const PREFIX=10;
-    const visitado=new Set();
-    muns.forEach(m=>{
-      if(visitado.has(m))return;
-      muns.forEach(m2=>{
-        if(m2===m||visitado.has(m2))return;
-        if(m.substring(0,PREFIX)===m2.substring(0,PREFIX)){
-          const maior=porMun[m].length>=porMun[m2].length?m:m2;
-          const menor=maior===m?m2:m;
-          porMun[maior].push(...porMun[menor]);
-          delete porMun[menor];
-          visitado.add(menor);
-        }
-      });
+    const filaC1=blocosC1.map(b=>{
+      // NN dentro de cada cidade para minimizar deslocamento interno
+      let rem=[...b.clientes],result=[],cLat=b.lat,cLon=b.lon;
+      while(rem.length){
+        let best=rem[0],bd=Infinity;
+        rem.forEach(c=>{const d=haversine(cLat,cLon,+c.latitude,+c.longitude);if(d<bd){bd=d;best=c;}});
+        result.push(best);cLat=+best.latitude;cLon=+best.longitude;
+        rem=rem.filter(c=>c!==best);
+      }
+      return {...b,clientes:result};
     });
+
+    let bi=0,dPtr=0;
+    while(bi<filaC1.length&&dPtr<plano.length){
+      const bloco=filaC1[bi];
+      if(!bloco.clientes.length){bi++;continue;}
+      const dia=plano[dPtr];
+      const take=Math.min(bloco.clientes.length,MAX-dia.clientes.length);
+      dia.clientes.push(...bloco.clientes.splice(0,take));
+      if(!bloco.clientes.length) bi++;       // bloco esgotado → próximo bloco mesmo dia
+      if(dia.clientes.length>=MAX) dPtr++;    // dia cheio → próximo dia
+    }
+    // Dia final parcial (< MIN): deixa no plano para o C2 completar
+    if(dPtr<plano.length&&plano[dPtr].clientes.length>0) dPtr++;
+    // Se o último dia C1 tem < MIN clientes, C2 vai incluí-lo
+    if(dPtr>0&&plano[dPtr-1].clientes.length>0&&plano[dPtr-1].clientes.length<MIN) dPtr--;
+    window._c1dPtr=dPtr;
+  }
+  const dPtrC1=window._c1dPtr||0;
+
+  // ── 9. CICLO 2: revisitas (longe→perto, score) ───────────────
+  if(dPtrC1<plano.length){
+    function scoreC(c){
+      return ((+c.fat_12m||0)/12)*0.5+(+c.mix_produtos||0)*20+(diasSemPedido(c)||0)*0.3;
+    }
+    // Blocos de revisita: mesma ordenação longe→perto
+    const filaC2=blocos
+      .map(b=>({...b,clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}))
+      .sort((a,b)=>b.distHome-a.distHome)
+      .map(b=>({...b,clientes:[...b.clientes]}));
+
+    let c2Idx=0;
+    // Guarda cópia para reinício de sub-ciclo
+    const filaC2orig=filaC2.map(b=>({...b,clientes:[...b.clientes]}));
+
+    for(let di=dPtrC1;di<plano.length;di++){
+      const dia=plano[di];
+      if(dia.clientes.length>=MAX) continue; // dia já cheio
+
+      // Se o dia já tem clientes (tail do C1), prioriza mesma cidade nas revisitas
+      const munsJaDia=new Set(dia.clientes.map(c=>c._mun||c.municipio));
+      if(munsJaDia.size>0){
+        // Completa com revisitas das mesmas cidades primeiro
+        for(let bi2=0;bi2<filaC2.length&&dia.clientes.length<MIN;bi2++){
+          if(!munsJaDia.has(filaC2[bi2].mun)) continue;
+          const b2=filaC2[bi2];
+          const n2=Math.min(b2.clientes.length,MIN-dia.clientes.length);
+          if(n2>0) dia.clientes.push(...b2.clientes.splice(0,n2));
+        }
+        if(dia.clientes.length>=MIN) continue; // dia preenchido
+      }
+
+      while(dia.clientes.length<MAX){
+        if(c2Idx>=filaC2.length){
+          // Reinicia sub-ciclo de revisitas
+          filaC2.forEach((b,i)=>{filaC2[i].clientes=[...filaC2orig[i].clientes];});
+          c2Idx=0;
+        }
+        const b=filaC2[c2Idx];
+        if(!b.clientes.length){c2Idx++;continue;}
+        const n=Math.min(b.clientes.length,MAX-dia.clientes.length);
+        dia.clientes.push(...b.clientes.splice(0,n));
+        if(!b.clientes.length) c2Idx++;
+        if(dia.clientes.length>=MIN) break;
+      }
+    }
   }
 
-  // ── PASSO 2: Centróide de cada município ─────────────────────
-  const munCentro={};
-  Object.entries(porMun).forEach(([m,cs])=>{
-    munCentro[m]={
-      lat:cs.reduce((s,c)=>s+(+c.latitude),0)/cs.length,
-      lon:cs.reduce((s,c)=>s+(+c.longitude),0)/cs.length
-    };
-  });
+  // ── 10. Constrói slots com horários ──────────────────────────
+  let prosContador=0;
 
-  // ── PASSO 3: Cria clusters diários por município ─────────────
-  const clusters=[];
-  const munsSorted=Object.keys(porMun).sort((a,b)=>porMun[b].length-porMun[a].length);
-  const munAssignado=new Set();
+  plano.forEach(({data,clientes,simulado})=>{
+    if(!clientes.length) return;
 
-  munsSorted.forEach(m=>{
-    if(munAssignado.has(m))return;
-    const cs=[...porMun[m]];
-    munAssignado.add(m);
+    // Agendamentos fixos para este dia
+    const agsFix=(agendamentos||[])
+      .filter(ag=>ag.data===data)
+      .sort((a,b)=>a.hora.localeCompare(b.hora));
 
-    if(cs.length>MAX){
-      // Município grande: divide em dias, priorizando por score
-      cs.sort((a,b)=>scoreRep(b)-scoreRep(a));
-      for(let i=0;i<cs.length;i+=MAX) clusters.push(cs.slice(i,i+MAX));
-    } else if(cs.length>=MIN){
-      clusters.push(cs);
-    } else {
-      // Município pequeno: funde com o vizinho mais próximo ainda não atribuído
-      const mcent=munCentro[m];
-      let viz=null, distMin=Infinity;
-      munsSorted.forEach(m2=>{
-        if(m2===m||munAssignado.has(m2))return;
-        const d=haversine(mcent.lat,mcent.lon,munCentro[m2].lat,munCentro[m2].lon);
-        if(d<distMin){distMin=d;viz=m2;}
-      });
-      if(viz&&distMin<40){  // máx 40km entre municípios do mesmo dia
-        munAssignado.add(viz);
-        const merged=[...cs,...porMun[viz]];
-        // Tenta adicionar um 3º município vizinho se ainda insuficiente
-        if(merged.length<MIN){
-          const mc2={lat:merged.reduce((s,c)=>s+(+c.latitude),0)/merged.length,lon:merged.reduce((s,c)=>s+(+c.longitude),0)/merged.length};
-          let viz2=null,distMin2=Infinity;
-          munsSorted.forEach(m3=>{
-            if(munAssignado.has(m3))return;
-            const d=haversine(mc2.lat,mc2.lon,munCentro[m3].lat,munCentro[m3].lon);
-            if(d<distMin2&&d<30){distMin2=d;viz2=m3;}  // 3º vizinho: máx 30km
-          });
-          if(viz2){munAssignado.add(viz2);merged.push(...porMun[viz2]);}
-        }
-        if(merged.length>MAX){
-          merged.sort((a,b)=>scoreRep(b)-scoreRep(a));
-          for(let i=0;i<merged.length;i+=MAX) clusters.push(merged.slice(i,i+MAX));
-        } else clusters.push(merged);
-      } else clusters.push(cs);
-    }
-  });
-
-  // PASSO 3B: segunda passagem — funde clusters muito pequenos (< MIN) com o cluster mais próximo.
-  // Sem restrição de MAX: um dia com 9-10 clientes é melhor que um dia com 1-2.
-  // O PASSO 8 corta naturalmente pelo horário. Raio até 80km em último caso.
-  for(const raio of [30,50,80,Infinity]){
-    const pequenos=clusters.filter(cl=>cl.length<MIN);
-    if(!pequenos.length) break;
-    pequenos.forEach(cl=>{
-      if(!clusters.includes(cl)) return;
-      const cc=clusterCentro(cl);
-      let bestCl=null, bestDist=raio;
-      // 1ª tentativa: busca cluster que caiba dentro do MAX
-      clusters.forEach(other=>{
-        if(other===cl) return;
-        if(other.length+cl.length>MAX) return; // respeita MAX
-        const dist=haversine(cc.lat,cc.lon,clusterCentro(other).lat,clusterCentro(other).lon);
-        if(dist<bestDist){bestDist=dist;bestCl=other;}
-      });
-      // 2ª tentativa (apenas última rodada com raio=Infinity): aceita até MAX+3
-      if(!bestCl && raio===Infinity){
-        clusters.forEach(other=>{
-          if(other===cl) return;
-          if(other.length+cl.length>MAX+3) return;
-          const dist=haversine(cc.lat,cc.lon,clusterCentro(other).lat,clusterCentro(other).lon);
-          if(dist<bestDist){bestDist=dist;bestCl=other;}
-        });
+    // NN dentro de cada cidade, mantendo ordem dos blocos
+    function nnCity(cls,sLat,sLon){
+      if(cls.length<=1) return [...cls];
+      let rem=[...cls];const r=[];let cLat=sLat,cLon=sLon;
+      while(rem.length){
+        let best=rem[0],bd=Infinity;
+        rem.forEach(c=>{const d=haversine(cLat,cLon,+c.latitude,+c.longitude);if(d<bd){bd=d;best=c;}});
+        r.push(best);cLat=+best.latitude;cLon=+best.longitude;
+        rem=rem.filter(c=>c!==best);
       }
-      if(bestCl){bestCl.push(...cl);clusters.splice(clusters.indexOf(cl),1);}
+      return r;
+    }
+
+    // Agrupa por cidade mantendo a ordem em que chegaram no plano
+    const porCidDia={};const ordCid=[];
+    clientes.forEach(c=>{
+      const m=c._mun||'?';
+      if(!porCidDia[m]){porCidDia[m]=[];ordCid.push(m);}
+      porCidDia[m].push(c);
     });
-  }
+    const ordenados=[];
+    let cLat=homeLat,cLon=homeLon;
+    ordCid.forEach(m=>{
+      const s=nnCity(porCidDia[m],cLat,cLon);
+      ordenados.push(...s);
+      if(s.length){cLat=+s[s.length-1].latitude;cLon=+s[s.length-1].longitude;}
+    });
 
-  // ── PASSO 4: Ordena clusters como rota cidade-em-cidade (NN) ─
-  function clusterCentro(cl){
-    return{lat:cl.reduce((s,c)=>s+(+c.latitude),0)/cl.length,lon:cl.reduce((s,c)=>s+(+c.longitude),0)/cl.length};
-  }
-  const ordenados=[];
-  {let rem=[...clusters],cur2=centro;
-  while(rem.length){
-    const best=rem.reduce((b,cl)=>haversine(cur2.lat,cur2.lon,clusterCentro(cl).lat,clusterCentro(cl).lon)<haversine(cur2.lat,cur2.lon,clusterCentro(b).lat,clusterCentro(b).lon)?cl:b);
-    ordenados.push(best); cur2=clusterCentro(best); rem=rem.filter(c=>c!==best);
-  }}
-
-  // ── PASSO 5: Distribui clusters pelos dias úteis ─────────────
-  // 1 cluster por dia; clusters extras vão ao dia mais próximo com espaço.
-  // Limite MAX_OVERFLOW_KM: cluster overflow só entra num dia se a distância centro→centro for < 50km.
-  // Se nenhum dia aceitar dentro do raio, aceita o melhor disponível (evita perder clientes).
-  const MAX_OVERFLOW_KM=50;
-  const gruposUnicos=futuros.map(()=>[]);
-  ordenados.forEach((cl,i)=>{
-    if(i<futuros.length){
-      gruposUnicos[i]=cl.map(c=>({...c,_rep:c._visitadoPasado||false}));
-    } else {
-      const cc=clusterCentro(cl);
-      let bestDi=0,bestScore=Infinity;
-      // 1ª tentativa: só dias com distância < MAX_OVERFLOW_KM
-      futuros.forEach((d,di)=>{
-        if(gruposUnicos[di].length>=MAX)return;
-        const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
-        const dist=haversine(cc.lat,cc.lon,gc.lat,gc.lon);
-        if(dist>MAX_OVERFLOW_KM)return;
-        const score=dist+(gruposUnicos[di].length/MAX)*50;
-        if(score<bestScore){bestScore=score;bestDi=di;}
-      });
-      // 2ª tentativa (fallback): qualquer dia com espaço
-      if(bestScore===Infinity){
-        futuros.forEach((d,di)=>{
-          if(gruposUnicos[di].length>=MAX)return;
-          const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
-          const score=haversine(cc.lat,cc.lon,gc.lat,gc.lon)+(gruposUnicos[di].length/MAX)*50;
-          if(score<bestScore){bestScore=score;bestDi=di;}
-        });
-      }
-      cl.forEach(c=>{if(gruposUnicos[bestDi].length<MAX)gruposUnicos[bestDi].push({...c,_rep:c._visitadoPasado||false});});
-    }
-  });
-
-  window._gruposUnicos=gruposUnicos; window._futuros=futuros; // debug
-
-  // ── PASSO 6: NN dentro de cada dia ───────────────────────────
-  function nnSort(clientes,startLat,startLon){
-    if(clientes.length<=1)return clientes;
-    let rem=[...clientes];
-    let cur=rem.reduce((b,c)=>haversine(startLat,startLon,+c.latitude,+c.longitude)<haversine(startLat,startLon,+b.latitude,+b.longitude)?c:b);
-    const rota=[cur]; rem=rem.filter(c=>c!==cur);
-    while(rem.length){
-      const last=rota[rota.length-1];
-      const next=rem.reduce((b,c)=>haversine(+last.latitude,+last.longitude,+c.latitude,+c.longitude)<haversine(+last.latitude,+last.longitude,+b.latitude,+b.longitude)?c:b);
-      rota.push(next); rem=rem.filter(c=>c!==next);
-    }
-    return rota;
-  }
-
-  // ── PASSO 7: (removido) — revisitas não entram no pré-slot ─────
-  // A fase de revisitas acontece DEPOIS que todos os clientes foram visitados uma vez,
-  // via PASSO A e PASSO B (pós-slot), usando lógica de rota geográfica simples.
-
-  // ── PASSO 8: Constrói slots com horários ─────────────────────
-  let prosContador=0; // compartilhado entre todos os dias do mês
-  futuros.forEach((data,di)=>{
-    const agsFix=agendamentos.filter(a=>a.data===data).sort((a,b)=>h2m(a.hora)-h2m(b.hora));
-    // NN começa do centróide do próprio cluster (não da carteira inteira)
-    // → evita puxar cliente isolado como ponto de partida
-    const cc=clusterCentro(gruposUnicos[di]);
-    // Município dominante do cluster do dia (usado pelo tentaInserir)
-    function munDominante(grupo){
-      const cnt={};
-      grupo.forEach(c=>{const m=(c.municipio||'').trim().toUpperCase();cnt[m]=(cnt[m]||0)+1;});
-      return Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
-    }
-    const munDom=munDominante(gruposUnicos[di]);
-    // Filtro de rota: remove o cliente que mais economiza km se a economia > minReducaoKm.
-    // Puramente geográfico — não depende do campo município no cadastro.
-    // Repete até nenhuma remoção ser vantajosa (garante convergência).
-    function kmRota(lista){
-      if(!lista.length)return 0;
-      let km=haversine(centro.lat,centro.lon,+lista[0].latitude,+lista[0].longitude);
-      for(let i=0;i<lista.length-1;i++)
-        km+=haversine(+lista[i].latitude,+lista[i].longitude,+lista[i+1].latitude,+lista[i+1].longitude);
-      km+=haversine(+lista[lista.length-1].latitude,+lista[lista.length-1].longitude,centro.lat,centro.lon);
-      return km;
-    }
-    function filtrarPorRota(lista){
-      const MIN_REDUCAO=CFG.maxDesvioKm; // economia mínima para valer remover (35km)
-      let mudou=true;
-      while(mudou&&lista.length>2){
-        mudou=false;
-        const kmBase=kmRota(lista);
-        let melhorReducao=MIN_REDUCAO,melhorIdx=-1;
-        for(let i=0;i<lista.length;i++){
-          const sem=[...lista.slice(0,i),...lista.slice(i+1)];
-          // Reordena o restante pelo NN para ter rota justa após remoção
-          const reordenado=sem.length>1?nnSort(sem,cc.lat,cc.lon):sem;
-          const reducao=kmBase-kmRota(reordenado);
-          if(reducao>melhorReducao){melhorReducao=reducao;melhorIdx=i;}
-        }
-        if(melhorIdx>=0){lista.splice(melhorIdx,1);mudou=true;}
-      }
-      return lista;
-    }
-    // Dedup: mesmo cliente pode ter entrado duas vezes no cluster via PASSO 3 — remover duplicatas
-    const _vistosCluster=new Set();
-    const _clusterDedup=gruposUnicos[di].filter(c=>{const id=c.cod_cliente+'_'+c.loja;if(_vistosCluster.has(id))return false;_vistosCluster.add(id);return true;});
-    // NN + filtro de rota: remove clientes que criam "V" no trajeto (desvio > maxDesvioKm)
-    const clientesOrdenados=filtrarPorRota(nnSort(_clusterDedup,cc.lat,cc.lon));
-
+    // Slots com horários
     const slots=[];
-    let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
+    let cur=CFG.horaIni;
+    let almOk=false;
+    let prevLat=homeLat,prevLon=homeLon;
+    let agIdx=0;
 
-    function insertAlmoco(){
-      if(!almOk&&cur>=CFG.almoco.ini&&cur<CFG.almoco.fim+60){
-        slots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(cur),horaFim:m2h(cur+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
-        almOk=true; cur+=CFG.almocoMin;
-      }
-    }
-
-    let agIdx=0, locAt=centro;
-    for(let vi=0;vi<clientesOrdenados.length;vi++){
-      insertAlmoco();
-      while(agIdx<agsFix.length&&h2m(agsFix[agIdx].hora)<=cur+55){
+    ordenados.forEach(c=>{
+      // Agendamentos que chegaram antes deste cliente
+      while(agIdx<agsFix.length&&h2m(agsFix[agIdx].hora)<=cur){
         const ag=agsFix[agIdx++];
-        if(h2m(ag.hora)>cur)cur=h2m(ag.hora);
-        insertAlmoco();
+        if(!almOk&&cur>=CFG.almoco.ini){
+          slots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(cur),horaFim:m2h(cur+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
+          almOk=true;cur+=CFG.almocoMin;
+        }
         const dur=parseInt(ag.duracao||60);
         slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,obs:ag.obs||'',municipio:ag.municipio||'',classificacao:''});
-        cur+=dur; locAt={latitude:ag.lat||locAt.latitude,longitude:ag.lon||locAt.longitude};
+        cur+=dur;
       }
-      const c=clientesOrdenados[vi];
-      // Pula cliente visitado no passado se o gap ainda não atingiu MIN_GAP_DIAS
-      if(c._visitadoPasado){
-        const cid=c.cod_cliente+'_'+c.loja;
-        const datas=[...(datasVisitaPasado[cid]||new Set())].sort();
-        const ultima=datas[datas.length-1];
-        if(ultima&&Math.round(Math.abs(new Date(data)-new Date(ultima))/86400000)<14) continue;
+
+      const travel=travelMin({lat:prevLat,lon:prevLon},{latitude:String(+c.latitude),longitude:String(+c.longitude)});
+
+      // Almoço antes desta visita se o horário bate
+      if(!almOk&&cur+travel>=CFG.almoco.ini){
+        const ini=Math.max(CFG.almoco.ini,cur);
+        slots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(ini),horaFim:m2h(ini+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
+        almOk=true;cur=ini+CFG.almocoMin;
       }
-      const travel=vi===0?0:travelMin(locAt,{latitude:c.latitude,longitude:c.longitude});
+
+      cur+=travel;
       const dur=duracaoCliente(c);
-      if(cur+travel+dur>CFG.horaFim)break;
-      if(vi>0)cur+=travel;
-      insertAlmoco();
-      if(cur+dur>CFG.horaFim)break;
+      const id=c.cod_cliente+'_'+c.loja;
       slots.push({
-        tipo:'visita',clienteId:c.cod_cliente+'_'+c.loja,nome:c.nome_cliente,
+        tipo:'visita',clienteId:id,nome:c.nome_cliente,
         horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,
-        classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,
-        fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,
-        diasSemPedido:diasSemPedido(c),rep:c._rep||false,
-        scoreRep:scoreRep(c),centralizado:c._centralizado||false
+        classificacao:c.classificacao||'',
+        lat:+c.latitude,lon:+c.longitude,
+        municipio:c._mun||c.municipio,
+        fat12m:c.fat_12m,mix:c.mix_produtos,
+        ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),
+        rep:jaVisitados.has(id)
       });
-      cur+=dur; locAt={latitude:c.latitude,longitude:c.longitude};
-      // Prospecção inline: ao sair de cidade singleton, insere prospecção antes do próximo deslocamento
-      const munAtual=(c.municipio||'').trim().toUpperCase();
-      const proxC=clientesOrdenados[vi+1];
-      const munProx=proxC?(proxC.municipio||'').trim().toUpperCase():null;
-      const ultimaNaCidade=munProx!==munAtual; // próximo cliente é de outra cidade (ou não existe)
-      // Prospecção: permite começar até horaFim (pode terminar um pouco depois — horário flexível)
-      if(cidadesSingleton.has(munAtual)&&ultimaNaCidade&&prosContador<CFG.maxProsp&&cur<=CFG.horaFim){
-        const label=munAtual.charAt(0)+munAtual.slice(1).toLowerCase();
-        slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:c.municipio,lat:+c.latitude,lon:+c.longitude});
-        cur+=CFG.pros; prosContador++;
-      }
-    }
-
-    while(agIdx<agsFix.length){
-      const ag=agsFix[agIdx++];
-      if(h2m(ag.hora)>cur)cur=h2m(ag.hora);
-      insertAlmoco();
-      const dur=parseInt(ag.duracao||60);
-      slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,obs:ag.obs||'',municipio:ag.municipio||'',classificacao:''});
+      prevLat=+c.latitude;prevLon=+c.longitude;
       cur+=dur;
-    }
+    });
 
-    if(!almOk){
-      const pos=Math.max(1,slots.findIndex(s=>s.tipo==='visita')+1);
+    // Almoço fallback se não inseriu ainda
+    if(!almOk&&slots.some(s=>s.tipo==='visita')){
+      const pos=slots.findIndex(s=>s.tipo==='visita')+1;
       const am=Math.min(CFG.almoco.fim,Math.max(CFG.almoco.ini,CFG.horaIni+60));
       slots.splice(pos,0,{tipo:'almoco',nome:'Almoço',horaIni:m2h(am),horaFim:m2h(am+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
     }
+
+    // ── Prospecção ────────────────────────────────────────────
+    if(prosContador<CFG.maxProsp){
+      const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
+      if(ultimaVis){
+        const lastFim=h2m(ultimaVis.horaFim);
+        if(lastFim+CFG.pros<=CFG.horaFim){
+          const munsNoDia=[...new Set(clientes.map(c=>c._mun||'?'))];
+          for(const mun of munsNoDia){
+            const n=tamMun[mun]||0;
+            const bloco=blocos.find(b=>b.mun===mun);
+            const distMun=bloco?haversine(homeLat,homeLon,bloco.lat,bloco.lon):0;
+            // ≤ 2 clientes: obrigatório | 3-5 clientes e cidade > 15km: analisa
+            const deveProsp=n<=2;
+            const analisaProsp=n>=3&&n<=5&&distMun>15;
+            if(deveProsp||analisaProsp){
+              const label=mun.charAt(0)+mun.slice(1).toLowerCase();
+              slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,
+                horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,
+                classificacao:'',municipio:mun,
+                lat:bloco?.lat||0,lon:bloco?.lon||0});
+              prosContador++;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if(simulado) slots._simulado=true;
     novoRot[data]=slots;
   });
-
-  // ── Segunda passagem: garante mínimo/dia e meta de 100 ──────────
-  // Regras:
-  //   1. Nenhum dia pode ter < MIN (5) visitas — prioridade absoluta, sem exceção.
-  //   2. Revisitas extras (para meta 100) vão para os ÚLTIMOS dias do mês primeiro.
-  // Prospecção NUNCA conta como visita.
-  function melhorEncaixe(slots){
-    const homeLoc={latitude:String(vHome?vHome.lat:centro.lat),longitude:String(vHome?vHome.lon:centro.lon)};
-    const visitas=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
-    if(!visitas.length) return [{curFim:CFG.horaIni,loc:homeLoc}];
-    const ultima=visitas[visitas.length-1];
-    const pontos=[{curFim:h2m(ultima.horaFim),loc:{latitude:ultima.lat?String(ultima.lat):String(centro.lat),longitude:ultima.lon?String(ultima.lon):String(centro.lon)}}];
-    const almoco=slots.find(s=>s.tipo==='almoco');
-    if(almoco){const fim=h2m(almoco.horaFim);if(fim<h2m(ultima.horaIni))pontos.push({curFim:fim,loc:homeLoc});}
-    // Slot de início do expediente: útil quando o dia começa tarde (visitas apenas à tarde)
-    pontos.push({curFim:CFG.horaIni,loc:homeLoc});
-    return pontos;
-  }
-
-  // diaOriginal: mapa clienteId → índice (0-based) do dia em que ocorre a visita original (não-rep)
-  // diaQualquerVisita: todas as datas de visita (calendário) por clienteId — para gap em dias corridos
-  const diaQualquerVisita={}; // clienteId → Set de strings 'YYYY-MM-DD'
-  // Inclui dias passados (tratados como executados) para cálculo correto do gap de revisita
-  Object.entries(datasVisitaPasado).forEach(([id,datas])=>{
-    if(!diaQualquerVisita[id]) diaQualquerVisita[id]=new Set();
-    datas.forEach(d=>diaQualquerVisita[id].add(d));
-  });
-  futuros.forEach(data=>{
-    (novoRot[data]||[]).filter(s=>s.clienteId&&s.tipo==='visita').forEach(s=>{
-      if(!diaQualquerVisita[s.clienteId]) diaQualquerVisita[s.clienteId]=new Set();
-      diaQualquerVisita[s.clienteId].add(data);
-    });
-  });
-  // Diferença em dias corridos entre duas strings 'YYYY-MM-DD'
-  function diffDiasCorreidos(d1,d2){return Math.round(Math.abs(new Date(d1)-new Date(d2))/86400000);}
-  const MIN_GAP_DIAS=14; // dias corridos
-
-  function tentaInserir(slots,limiteDia,opts={}){
-    if(slots.filter(s=>s.tipo==='visita').length>=limiteDia)return false;
-    const pontos=melhorEncaixe(slots);
-    if(!pontos)return false;
-    const idsNoDia=new Set(slots.filter(s=>s.clienteId).map(s=>s.clienteId));
-    const visSlots=slots.filter(s=>s.tipo==='visita'&&s.lat&&s.lon);
-    const cLat=visSlots.length?visSlots.reduce((s,x)=>s+x.lat,0)/visSlots.length:null;
-    const cLon=visSlots.length?visSlots.reduce((s,x)=>s+x.lon,0)/visSlots.length:null;
-    const maxGeoKm=opts.geoKm||null;
-    const cntMun={};
-    visSlots.forEach(s=>{const m=(s.municipio||'').trim().toUpperCase();cntMun[m]=(cntMun[m]||0)+1;});
-    const munDia=Object.entries(cntMun).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
-    const _diaKey=Object.keys(novoRot).find(d=>novoRot[d]===slots);
-    for(const {curFim:cf,loc} of pontos){
-      const gapMin=opts.minGap!==undefined?opts.minGap:MIN_GAP_DIAS;
-      let pool=[...rankRep].filter(c=>{
-        const id=c.cod_cliente+'_'+c.loja;
-        if(idsNoDia.has(id))return false;
-        // Gap em dias corridos: bloqueia se alguma visita anterior estiver a menos de gapMin dias
-        if(_diaKey&&diaQualquerVisita[id]){
-          for(const dv of diaQualquerVisita[id]){
-            if(diffDiasCorreidos(_diaKey,dv)<gapMin)return false;
-          }
-        }
-        if(maxGeoKm&&cLat!==null){
-          if(haversine(cLat,cLon,+c.latitude,+c.longitude)>maxGeoKm)return false;
-        }
-        return true;
-      });
-      pool.sort((a,b)=>travelMin(loc,{latitude:a.latitude,longitude:a.longitude})-travelMin(loc,{latitude:b.latitude,longitude:b.longitude}));
-      const candidatos=munDia
-        ?[...pool.filter(c=>(c.municipio||'').trim().toUpperCase()===munDia),
-           ...pool.filter(c=>(c.municipio||'').trim().toUpperCase()!==munDia)]
-        :pool;
-      for(const c of candidatos){
-        const travel=travelMin(loc,{latitude:c.latitude,longitude:c.longitude});
-        const dur=duracaoCliente(c);
-        if(cf+travel+dur<=CFG.horaFim){
-          const id=c.cod_cliente+'_'+c.loja;
-          slots.push({tipo:'visita',clienteId:id,nome:c.nome_cliente,horaIni:m2h(cf+travel),horaFim:m2h(cf+travel+dur),duracao:dur,classificacao:c.classificacao,lat:+c.latitude,lon:+c.longitude,municipio:c.municipio,fat12m:c.fat_12m,mix:c.mix_produtos,ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),rep:true,scoreRep:scoreRep(c)});
-          idsNoDia.add(id);
-          if(_diaKey){
-            if(!diaQualquerVisita[id])diaQualquerVisita[id]=new Set();
-            diaQualquerVisita[id].add(_diaKey);
-          }
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-  let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-  const reordenar=(slots)=>{
-    const byHora=[...slots].sort((a,b)=>a.tipo==='almoco'?0:a.horaIni.localeCompare(b.horaIni));
-    slots.length=0; byHora.forEach(s=>slots.push(s));
-  };
-
-  // PASSO A removido: não força mínimo de 5 em dias de cidades pequenas.
-  // Dia com 2-3 clientes originais fica com 2-3 visitas — é geograficamente correto.
-  // O PASSO B garante a meta 100 enchendo os últimos dias com revisitas dos melhores clientes.
-
-  // PASSO B0: preenche dias completamente vazios (sem nenhuma visita única) com revisitas.
-  // Garante que remoção de clientes passados do pool não deixe buracos no calendário.
-  for(const data of futuros){
-    const slots=novoRot[data];
-    if(!slots) continue;
-    if(slots.some(s=>s.tipo==='visita')) continue; // dia já tem visitas → pula
-    let inseriu=true;
-    while(inseriu&&totalVis<CFG.metaVis&&slots.filter(s=>s.tipo==='visita').length<CFG.maxPorDia){
-      inseriu=tentaInserir(slots,CFG.maxPorDia,{geoKm:null,minGap:7});
-      if(inseriu){totalVis++;reordenar(slots);}
-    }
-  }
-
-  // PASSO B: completa meta 100 com revisitas concentradas no fim do mês.
-  // Estratégia em 3 camadas — cada uma abre mais dias se a anterior não fechar 100:
-  //   1ª: só última semana (últimos 6 dias úteis)
-  //   2ª: segunda quinzena (últimos 10 dias úteis)
-  //   3ª: qualquer dia (fallback final)
-  const passosB=[
-    {startIdx:Math.max(0,futuros.length-6), geoKm:40,  minGap:14},
-    {startIdx:Math.max(0,futuros.length-6), geoKm:null, minGap:14},
-    {startIdx:Math.max(0,futuros.length-6), geoKm:null, minGap:7},
-    {startIdx:Math.max(0,futuros.length-10),geoKm:null, minGap:14},
-    {startIdx:Math.max(0,futuros.length-10),geoKm:null, minGap:7},
-    {startIdx:0,                             geoKm:null, minGap:14},
-    {startIdx:0,                             geoKm:null, minGap:7},
-    {startIdx:0,                             geoKm:null, minGap:3},
-    {startIdx:0,                             geoKm:null, minGap:1},
-  ];
-  for(const {startIdx,geoKm,minGap} of passosB){
-    if(totalVis>=CFG.metaVis)break;
-    for(const data of [...futuros].slice(startIdx).reverse()){
-      if(totalVis>=CFG.metaVis)break;
-      const slots=novoRot[data];
-      if(!slots)continue;
-      let inseriu=true;
-      while(inseriu&&totalVis<CFG.metaVis){
-        inseriu=tentaInserir(slots,CFG.maxPorDia,{geoKm,minGap});
-        if(inseriu){totalVis++;reordenar(slots);}
-      }
-    }
-  }
-
-  // ── Prospecção P2: dias genéricos com sobra de tempo ─────────
-  // P1 (singleton) já foi inserida dentro do PASSO 8, em sequência com os horários.
-  // P2 preenche dias sem singleton que ainda têm tempo sobrando.
-  for(const data of futuros){
-    if(prosContador>=CFG.maxProsp)break;
-    const slots=novoRot[data];
-    if(!slots)continue;
-    if(slots.some(s=>s.tipo==='prospeccao'))continue;
-    const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
-    if(!ultimaVis)continue;
-    const lastFim=h2m(ultimaVis.horaFim);
-    if(lastFim+CFG.pros>CFG.horaFim)continue;
-    // Identifica cidades singleton visitadas hoje para nomear a prospecção
-    const visitas=slots.filter(s=>s.tipo==='visita'&&s.municipio);
-    const singletonsDia=[...new Set(visitas.map(s=>(s.municipio||'').trim().toUpperCase()))]
-      .filter(m=>cidadesSingleton.has(m));
-    const label=singletonsDia.length
-      ? singletonsDia.map(m=>m.charAt(0)+m.slice(1).toLowerCase()).join(' / ')
-      : (ultimaVis.municipio||'novo cliente');
-    const ehSingleton=singletonsDia.length>0;
-    // Só adiciona prospecção em dia genérico se ainda não atingiu metaProsp
-    if(!ehSingleton&&prosContador>=CFG.metaProsp&&lastFim+CFG.pros>CFG.horaFim-30)continue;
-    slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,classificacao:'',municipio:ultimaVis.municipio||'',lat:ultimaVis.lat||0,lon:ultimaVis.lon||0});
-    prosContador++;
-  }
-
-  // DEDUP de segurança: remove clienteId duplicado dentro do mesmo dia (antes do reordenamento)
-  Object.values(novoRot).forEach(slots=>{
-    const seen=new Set();
-    const ok=slots.filter(s=>{if(!s.clienteId)return true;if(seen.has(s.clienteId))return false;seen.add(s.clienteId);return true;});
-    slots.length=0;ok.forEach(s=>slots.push(s));
-  });
-
-  // PASSO C: reordena visitas de cada dia por nearest-neighbor a partir de casa
-  // Sem isso o algoritmo empilha clientes na ordem de inserção, gerando rotas em zigue-zague.
-  {
-    const vHome=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
-    for(const data of futuros){
-      const slots=novoRot[data];
-      if(!slots||slots.length<2)continue;
-
-      // Separa slots fixos (almoço, prospecção) das visitas reordenáveis
-      const visitas=slots.filter(s=>(s.tipo==='visita'||s.tipo==='agendamento')&&s.lat&&s.lon);
-      if(visitas.length<2)continue;
-
-      // Nearest-neighbor a partir de casa (ou primeiro cliente se sem home)
-      const startLat=vHome?vHome.lat:+visitas[0].lat;
-      const startLon=vHome?vHome.lon:+visitas[0].lon;
-      const pool=[...visitas];
-      const ordered=[];
-      let curLat=startLat, curLon=startLon;
-      while(pool.length){
-        let bestIdx=0, bestDist=Infinity;
-        pool.forEach((v,i)=>{
-          const d=haversine(curLat,curLon,+v.lat,+v.lon);
-          if(d<bestDist){bestDist=d;bestIdx=i;}
-        });
-        const chosen=pool.splice(bestIdx,1)[0];
-        ordered.push(chosen);
-        curLat=+chosen.lat; curLon=+chosen.lon;
-      }
-
-      // Reconstrói os slots do dia com tempos recalculados
-      // Agendamentos fixos mantêm seu horário original; visitas recebem novo horaIni/horaFim
-      const newSlots=[];
-      let cur=CFG.horaIni;
-      let almOk=slots.some(s=>s.tipo==='almoco'); // já tem almoço?
-      let prevLat=startLat, prevLon=startLon;
-
-      ordered.forEach((v,i)=>{
-        const travel=i===0?travelMin({lat:startLat,lon:startLon},{lat:+v.lat,lon:+v.lon})
-                          :travelMin({lat:prevLat,lon:prevLon},{lat:+v.lat,lon:+v.lon});
-        cur+=travel;
-        // Inserir almoço antes se caiu no intervalo
-        if(!almOk&&cur>=CFG.almoco.ini){
-          const ini=Math.max(CFG.almoco.ini,cur);
-          newSlots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(ini),horaFim:m2h(ini+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
-          almOk=true; cur=ini+CFG.almocoMin;
-        }
-        if(cur>=CFG.horaFim)cur=CFG.horaFim-v.duracao; // não deixar passar do expediente
-        v.horaIni=m2h(cur);
-        v.horaFim=m2h(cur+v.duracao);
-        newSlots.push(v);
-        prevLat=+v.lat; prevLon=+v.lon;
-        cur+=v.duracao;
-      });
-
-      // Prospecções vão depois da última visita
-      slots.filter(s=>s.tipo==='prospeccao').forEach(s=>{
-        s.horaIni=m2h(cur); s.horaFim=m2h(cur+s.duracao); cur+=s.duracao;
-        newSlots.push(s);
-      });
-
-      slots.length=0;
-      newSlots.forEach(s=>slots.push(s));
-    }
-  }
 
   roteiro=novoRot;
   salvar();
   renderTudo();
   selecionarDia(diaSel);
 }
+
 
 // ── RENDER ──────────────────────────────────────────────────
 function renderTudo(){renderMiniCal();renderStats();renderViewAtual();}
