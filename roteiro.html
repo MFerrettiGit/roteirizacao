@@ -861,41 +861,33 @@ function gerarRoteiro(){
     return false;
   }
   let totalVis=Object.values(novoRot).reduce((s,sl)=>s+sl.filter(x=>x.tipo==='visita').length,0);
-
-  // Fase 1 termina no último dia que tem visita original (não-revisita).
-  // Revisitas só entram a partir do dia seguinte — carteira inteira primeiro.
-  const ultimoDiaOriginal=futuros.reduce((last,data,di)=>{
-    const slots=novoRot[data]||[];
-    return slots.some(s=>s.tipo==='visita'&&!s.rep)?di:last;
-  },-1);
   const reordenar=(slots)=>{
     const byHora=[...slots].sort((a,b)=>a.tipo==='almoco'?0:a.horaIni.localeCompare(b.horaIni));
     slots.length=0; byHora.forEach(s=>slots.push(s));
   };
 
-  // PASSO A: completa dias da fase de revisitas que ficaram abaixo do mínimo
-  // (dias da fase 1 podem ter menos visitas — é normal para cidades pequenas)
+  // PASSO A: garante mínimo de visitas por dia em todos os dias
+  // (cidade pequena com 2 clientes precisa de complemento geográfico próximo)
   for(const minGap of [14,10,7,5,3,1]){
     let avancou=true;
     while(avancou){
       avancou=false;
-      futuros.forEach((data,di)=>{
-        if(di<=ultimoDiaOriginal)return; // fase 1: não força revisitas
+      for(const data of futuros){
         const slots=novoRot[data];
-        if(!slots)return;
-        if(slots.filter(s=>s.tipo==='visita').length>=MIN)return;
+        if(!slots)continue;
+        if(slots.filter(s=>s.tipo==='visita').length>=MIN)continue;
         if(tentaInserir(slots,CFG.maxPorDia,{minGap})){totalVis++;avancou=true;}
-      });
+      }
     }
   }
 
-  // PASSO B: completa meta 100 com revisitas — do último dia para o primeiro da fase 2
+  // PASSO B: completa meta 100 preenchendo do ÚLTIMO dia para o primeiro
+  // → revisitas extras ficam concentradas no fim do mês
   for(const [geoKm,minGap] of [[40,14],[null,14],[null,10],[null,7],[null,5],[null,3],[null,1]]){
     let avancou=true;
     while(totalVis<CFG.metaVis && avancou){
       avancou=false;
-      const diasRevisita=[...futuros].reverse().filter((_,ri)=>futuros.length-1-ri>ultimoDiaOriginal);
-      for(const data of diasRevisita){
+      for(const data of [...futuros].reverse()){
         if(totalVis>=CFG.metaVis)break;
         const slots=novoRot[data];
         if(!slots)continue;
