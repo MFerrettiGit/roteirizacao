@@ -20,3 +20,21 @@ window.VENDEDORES_HOME = {
   "SJ. BOA VISTA":  { nome:"Célia",        lat:-21.9718858, lon:-46.7615039 },
   "CARAGUATATUBA":  { nome:"Karina",       lat:-23.6263070, lon:-45.4370867 }
 };
+
+// Mapeamento cod_vendedor → setor (derivado por centróide geográfico dos clientes)
+window.VENDEDORES_COD = {
+  "000009": "SOROCABA",
+  "000014": "SJ. BOA VISTA",
+  "000022": "ITAPETININGA",
+  "000027": "SJ. CAMPOS",
+  "000082": "SOROCABA",
+  "000095": "ATIBAIA",
+  "000097": "FRANCA",
+  "000103": "CAMPINAS",
+  "000105": "JUNDIAÍ",
+  "000112": "SÃO CARLOS",
+  "000116": "ITAPETININGA",
+  "000117": "RIBEIRÃO PRETO",
+  "000118": "INDAIATUBA",
+  "000119": "CARAGUATATUBA"
+};
