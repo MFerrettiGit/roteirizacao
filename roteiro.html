@@ -496,7 +496,20 @@ function gerarRoteiro(){
   const futuros=util.filter(d=>d>=hojeStr);
 
   window._novoRot={}; const novoRot=window._novoRot;
-  util.filter(d=>d<hojeStr).forEach(d=>{if(roteiro[d])novoRot[d]=roteiro[d];});
+
+  // Dias passados: preserva o roteiro existente e marca clientes como "já visitados"
+  const visitadosPasado=new Set(); // clienteIds visitados em dias passados
+  const datasVisitaPasado={}; // clienteId → Set<string> de datas passadas
+  util.filter(d=>d<hojeStr).forEach(d=>{
+    if(roteiro[d]){
+      novoRot[d]=roteiro[d];
+      roteiro[d].filter(s=>s.clienteId&&s.tipo==='visita').forEach(s=>{
+        visitadosPasado.add(s.clienteId);
+        if(!datasVisitaPasado[s.clienteId]) datasVisitaPasado[s.clienteId]=new Set();
+        datasVisitaPasado[s.clienteId].add(d);
+      });
+    }
+  });
 
   if(!futuros.length||!CLIENTES.length){roteiro=novoRot;salvar();renderTudo();return;}
 
@@ -522,6 +535,13 @@ function gerarRoteiro(){
   const poolDedup=pool.filter(c=>{const id=c.cod_cliente+'_'+c.loja;if(_cidVisto.has(id))return false;_cidVisto.add(id);return true;});
   // Reatribuir pool → poolDedup nas referências seguintes
   pool.length=0; poolDedup.forEach(c=>pool.push(c));
+
+  // Marca clientes visitados em dias passados — ficam no pool para não criar dias vazios,
+  // mas em PASSO 8 são pulados se o gap ainda não atingiu MIN_GAP_DIAS dias desde a última visita.
+  pool.forEach(c=>{
+    const id=c.cod_cliente+'_'+c.loja;
+    if(visitadosPasado.has(id)) c._visitadoPasado=true;
+  });
 
   // Cidades singleton: ≤ maxClientesSingleton clientes na carteira → prospecção planejada
   const tamanhoMun={};
@@ -556,6 +576,28 @@ function gerarRoteiro(){
     const m=(c.municipio||'SEM_MUNICIPIO').trim().toUpperCase();
     (porMun[m]=porMun[m]||[]).push(c);
   });
+
+  // ── PASSO 1B: Unifica municípios com nomes truncados pelo ERP ─
+  // ERP trunca nomes a ~15 chars: "SAO JOAQUIM DA" e "SAO JOAQUIM DA BARRA" = mesma cidade.
+  // Critério: prefixo de 10 chars igual → mesmo município (usa o nome do grupo maior).
+  {
+    const muns=Object.keys(porMun);
+    const PREFIX=10;
+    const visitado=new Set();
+    muns.forEach(m=>{
+      if(visitado.has(m))return;
+      muns.forEach(m2=>{
+        if(m2===m||visitado.has(m2))return;
+        if(m.substring(0,PREFIX)===m2.substring(0,PREFIX)){
+          const maior=porMun[m].length>=porMun[m2].length?m:m2;
+          const menor=maior===m?m2:m;
+          porMun[maior].push(...porMun[menor]);
+          delete porMun[menor];
+          visitado.add(menor);
+        }
+      });
+    });
+  }
 
   // ── PASSO 2: Centróide de cada município ─────────────────────
   const munCentro={};
@@ -613,6 +655,36 @@ function gerarRoteiro(){
     }
   });
 
+  // PASSO 3B: segunda passagem — funde clusters muito pequenos (< MIN) com o cluster mais próximo.
+  // Sem restrição de MAX: um dia com 9-10 clientes é melhor que um dia com 1-2.
+  // O PASSO 8 corta naturalmente pelo horário. Raio até 80km em último caso.
+  for(const raio of [30,50,80,Infinity]){
+    const pequenos=clusters.filter(cl=>cl.length<MIN);
+    if(!pequenos.length) break;
+    pequenos.forEach(cl=>{
+      if(!clusters.includes(cl)) return;
+      const cc=clusterCentro(cl);
+      let bestCl=null, bestDist=raio;
+      // 1ª tentativa: busca cluster que caiba dentro do MAX
+      clusters.forEach(other=>{
+        if(other===cl) return;
+        if(other.length+cl.length>MAX) return; // respeita MAX
+        const dist=haversine(cc.lat,cc.lon,clusterCentro(other).lat,clusterCentro(other).lon);
+        if(dist<bestDist){bestDist=dist;bestCl=other;}
+      });
+      // 2ª tentativa (apenas última rodada com raio=Infinity): aceita até MAX+3
+      if(!bestCl && raio===Infinity){
+        clusters.forEach(other=>{
+          if(other===cl) return;
+          if(other.length+cl.length>MAX+3) return;
+          const dist=haversine(cc.lat,cc.lon,clusterCentro(other).lat,clusterCentro(other).lon);
+          if(dist<bestDist){bestDist=dist;bestCl=other;}
+        });
+      }
+      if(bestCl){bestCl.push(...cl);clusters.splice(clusters.indexOf(cl),1);}
+    });
+  }
+
   // ── PASSO 4: Ordena clusters como rota cidade-em-cidade (NN) ─
   function clusterCentro(cl){
     return{lat:cl.reduce((s,c)=>s+(+c.latitude),0)/cl.length,lon:cl.reduce((s,c)=>s+(+c.longitude),0)/cl.length};
@@ -625,24 +697,40 @@ function gerarRoteiro(){
   }}
 
   // ── PASSO 5: Distribui clusters pelos dias úteis ─────────────
-  // 1 cluster por dia; clusters extras vão ao dia mais próximo com espaço (sem limite de distância —
-  // o filtro de rota dentro de cada dia (filtrarPorRota) cuida de remover desvios ruins)
+  // 1 cluster por dia; clusters extras vão ao dia mais próximo com espaço.
+  // Limite MAX_OVERFLOW_KM: cluster overflow só entra num dia se a distância centro→centro for < 50km.
+  // Se nenhum dia aceitar dentro do raio, aceita o melhor disponível (evita perder clientes).
+  const MAX_OVERFLOW_KM=50;
   const gruposUnicos=futuros.map(()=>[]);
   ordenados.forEach((cl,i)=>{
     if(i<futuros.length){
-      gruposUnicos[i]=cl.map(c=>({...c,_rep:false}));
+      gruposUnicos[i]=cl.map(c=>({...c,_rep:c._visitadoPasado||false}));
     } else {
       const cc=clusterCentro(cl);
       let bestDi=0,bestScore=Infinity;
+      // 1ª tentativa: só dias com distância < MAX_OVERFLOW_KM
       futuros.forEach((d,di)=>{
         if(gruposUnicos[di].length>=MAX)return;
         const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
-        const score=haversine(cc.lat,cc.lon,gc.lat,gc.lon)+(gruposUnicos[di].length/MAX)*50;
+        const dist=haversine(cc.lat,cc.lon,gc.lat,gc.lon);
+        if(dist>MAX_OVERFLOW_KM)return;
+        const score=dist+(gruposUnicos[di].length/MAX)*50;
         if(score<bestScore){bestScore=score;bestDi=di;}
       });
-      cl.forEach(c=>{if(gruposUnicos[bestDi].length<MAX)gruposUnicos[bestDi].push({...c,_rep:false});});
+      // 2ª tentativa (fallback): qualquer dia com espaço
+      if(bestScore===Infinity){
+        futuros.forEach((d,di)=>{
+          if(gruposUnicos[di].length>=MAX)return;
+          const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
+          const score=haversine(cc.lat,cc.lon,gc.lat,gc.lon)+(gruposUnicos[di].length/MAX)*50;
+          if(score<bestScore){bestScore=score;bestDi=di;}
+        });
+      }
+      cl.forEach(c=>{if(gruposUnicos[bestDi].length<MAX)gruposUnicos[bestDi].push({...c,_rep:c._visitadoPasado||false});});
     }
   });
+
+  window._gruposUnicos=gruposUnicos; window._futuros=futuros; // debug
 
   // ── PASSO 6: NN dentro de cada dia ───────────────────────────
   function nnSort(clientes,startLat,startLon){
@@ -733,6 +821,13 @@ function gerarRoteiro(){
         cur+=dur; locAt={latitude:ag.lat||locAt.latitude,longitude:ag.lon||locAt.longitude};
       }
       const c=clientesOrdenados[vi];
+      // Pula cliente visitado no passado se o gap ainda não atingiu MIN_GAP_DIAS
+      if(c._visitadoPasado){
+        const cid=c.cod_cliente+'_'+c.loja;
+        const datas=[...(datasVisitaPasado[cid]||new Set())].sort();
+        const ultima=datas[datas.length-1];
+        if(ultima&&Math.round(Math.abs(new Date(data)-new Date(ultima))/86400000)<14) continue;
+      }
       const travel=vi===0?0:travelMin(locAt,{latitude:c.latitude,longitude:c.longitude});
       const dur=duracaoCliente(c);
       if(cur+travel+dur>CFG.horaFim)break;
@@ -799,6 +894,11 @@ function gerarRoteiro(){
   // diaOriginal: mapa clienteId → índice (0-based) do dia em que ocorre a visita original (não-rep)
   // diaQualquerVisita: todas as datas de visita (calendário) por clienteId — para gap em dias corridos
   const diaQualquerVisita={}; // clienteId → Set de strings 'YYYY-MM-DD'
+  // Inclui dias passados (tratados como executados) para cálculo correto do gap de revisita
+  Object.entries(datasVisitaPasado).forEach(([id,datas])=>{
+    if(!diaQualquerVisita[id]) diaQualquerVisita[id]=new Set();
+    datas.forEach(d=>diaQualquerVisita[id].add(d));
+  });
   futuros.forEach(data=>{
     (novoRot[data]||[]).filter(s=>s.clienteId&&s.tipo==='visita').forEach(s=>{
       if(!diaQualquerVisita[s.clienteId]) diaQualquerVisita[s.clienteId]=new Set();
@@ -869,6 +969,19 @@ function gerarRoteiro(){
   // PASSO A removido: não força mínimo de 5 em dias de cidades pequenas.
   // Dia com 2-3 clientes originais fica com 2-3 visitas — é geograficamente correto.
   // O PASSO B garante a meta 100 enchendo os últimos dias com revisitas dos melhores clientes.
+
+  // PASSO B0: preenche dias completamente vazios (sem nenhuma visita única) com revisitas.
+  // Garante que remoção de clientes passados do pool não deixe buracos no calendário.
+  for(const data of futuros){
+    const slots=novoRot[data];
+    if(!slots) continue;
+    if(slots.some(s=>s.tipo==='visita')) continue; // dia já tem visitas → pula
+    let inseriu=true;
+    while(inseriu&&totalVis<CFG.metaVis&&slots.filter(s=>s.tipo==='visita').length<CFG.maxPorDia){
+      inseriu=tentaInserir(slots,CFG.maxPorDia,{geoKm:null,minGap:7});
+      if(inseriu){totalVis++;reordenar(slots);}
+    }
+  }
 
   // PASSO B: completa meta 100 com revisitas concentradas no fim do mês.
   // Estratégia em 3 camadas — cada uma abre mais dias se a anterior não fechar 100:
