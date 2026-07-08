@@ -631,15 +631,28 @@ function gerarRoteiro(){
       gruposUnicos[i]=cl.map(c=>({...c,_rep:false}));
     } else {
       // Clusters extras: adiciona no dia mais próximo com espaço
+      // Limite de 50km: evita misturar cidades em direções opostas (ex: Restinga+PatrocínioPaulista)
       const cc=clusterCentro(cl);
-      let bestDi=0,bestScore=Infinity;
+      const MAX_OVERFLOW_KM=50;
+      let bestDi=-1,bestScore=Infinity;
       futuros.forEach((d,di)=>{
         if(gruposUnicos[di].length>=MAX)return;
         const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
-        const score=haversine(cc.lat,cc.lon,gc.lat,gc.lon)+(gruposUnicos[di].length/MAX)*50;
+        const dist=haversine(cc.lat,cc.lon,gc.lat,gc.lon);
+        if(dist>MAX_OVERFLOW_KM)return; // não mistura dias distantes demais
+        const score=dist+(gruposUnicos[di].length/MAX)*50;
         if(score<bestScore){bestScore=score;bestDi=di;}
       });
-      cl.forEach(c=>{if(gruposUnicos[bestDi].length<MAX)gruposUnicos[bestDi].push({...c,_rep:false});});
+      // Fallback: se nenhum dia está dentro do raio, usa o mais próximo sem restrição
+      if(bestDi===-1){
+        futuros.forEach((d,di)=>{
+          if(gruposUnicos[di].length>=MAX)return;
+          const gc=clusterCentro(gruposUnicos[di].length?gruposUnicos[di]:[{latitude:String(centro.lat),longitude:String(centro.lon)}]);
+          const score=haversine(cc.lat,cc.lon,gc.lat,gc.lon)+(gruposUnicos[di].length/MAX)*50;
+          if(score<bestScore){bestScore=score;bestDi=di;}
+        });
+      }
+      if(bestDi>=0)cl.forEach(c=>{if(gruposUnicos[bestDi].length<MAX)gruposUnicos[bestDi].push({...c,_rep:false});});
     }
   });
 
@@ -764,7 +777,13 @@ function gerarRoteiro(){
     // Dedup: mesmo cliente pode ter entrado duas vezes no cluster via PASSO 3 — remover duplicatas
     const _vistosCluster=new Set();
     const _clusterDedup=gruposUnicos[di].filter(c=>{const id=c.cod_cliente+'_'+c.loja;if(_vistosCluster.has(id))return false;_vistosCluster.add(id);return true;});
-    const clientesOrdenados=filtrarPorRota(nnSort(_clusterDedup,cc.lat,cc.lon));
+    // Centróide do núcleo original (sem revisitas): referência geográfica do dia
+    const _cliOrig=_clusterDedup.filter(c=>!c._rep);
+    const ccOrig=_cliOrig.length?{lat:_cliOrig.reduce((s,c)=>s+(+c.latitude),0)/_cliOrig.length,lon:_cliOrig.reduce((s,c)=>s+(+c.longitude),0)/_cliOrig.length}:cc;
+    // Remove clientes que estão a mais de 50km do núcleo original — vieram de overflow ou revisitas distantes
+    const MAX_RAIO_DIA=50;
+    const _semOutliers=_clusterDedup.filter(c=>haversine(ccOrig.lat,ccOrig.lon,+c.latitude,+c.longitude)<=MAX_RAIO_DIA);
+    const clientesOrdenados=filtrarPorRota(nnSort(_semOutliers.length>=2?_semOutliers:_clusterDedup,cc.lat,cc.lon));
 
     const slots=[];
     let cur=CFG.horaIni, almOk=false; // primeiro cliente às 08:00 em ponto
