@@ -617,12 +617,29 @@ function gerarRoteiro(){
   function clusterCentro(cl){
     return{lat:cl.reduce((s,c)=>s+(+c.latitude),0)/cl.length,lon:cl.reduce((s,c)=>s+(+c.longitude),0)/cl.length};
   }
-  const ordenados=[];
-  let rem=[...clusters], cur2=centro;
-  while(rem.length){
-    const best=rem.reduce((b,cl)=>haversine(cur2.lat,cur2.lon,clusterCentro(cl).lat,clusterCentro(cl).lon)<haversine(cur2.lat,cur2.lon,clusterCentro(b).lat,clusterCentro(b).lon)?cl:b);
-    ordenados.push(best); cur2=clusterCentro(best); rem=rem.filter(c=>c!==best);
+  // Dias "próximos de casa" reservados para a última semana do mês
+  // Os N clusters mais próximos do endereço residencial ficam nos últimos N dias úteis
+  const DIAS_PROXIMOS_FIM=5;
+  function nnChain(lista,startLat,startLon){
+    const result=[],rem2=[...lista];
+    let cur2={lat:startLat,lon:startLon};
+    while(rem2.length){
+      const best=rem2.reduce((b,cl)=>haversine(cur2.lat,cur2.lon,clusterCentro(cl).lat,clusterCentro(cl).lon)<haversine(cur2.lat,cur2.lon,clusterCentro(b).lat,clusterCentro(b).lon)?cl:b);
+      result.push(best); cur2=clusterCentro(best); rem2.splice(rem2.indexOf(best),1);
+    }
+    return result;
   }
+  // Separa os N mais próximos de casa para reservar na última semana
+  const nFim=Math.min(DIAS_PROXIMOS_FIM,clusters.length);
+  const clustersComDist=clusters.map(cl=>({cl,dist:haversine(centro.lat,centro.lon,clusterCentro(cl).lat,clusterCentro(cl).lon)}));
+  clustersComDist.sort((a,b)=>a.dist-b.dist);
+  const clustersUltimos=clustersComDist.slice(0,nFim).map(x=>x.cl);
+  const clustersPrimeiros=clustersComDist.slice(nFim).map(x=>x.cl);
+  // NN independente em cada grupo
+  const ordenados=[
+    ...nnChain(clustersPrimeiros,centro.lat,centro.lon),
+    ...nnChain(clustersUltimos,centro.lat,centro.lon)
+  ];
 
   // ── PASSO 5: Distribui clusters pelos dias úteis ─────────────
   const gruposUnicos=futuros.map(()=>[]);
