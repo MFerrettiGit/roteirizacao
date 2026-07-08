@@ -559,116 +559,242 @@ function gerarRoteiro(){
   const homeLat=_hv?_hv.lat:pool.reduce((s,c)=>s+(+c.latitude),0)/pool.length;
   const homeLon=_hv?_hv.lon:pool.reduce((s,c)=>s+(+c.longitude),0)/pool.length;
 
-  // ── 5. Blocos por cidade ──────────────────────────────────────
+  // ── 5. Blocos por cidade (com bearing + corredor angular + flag local) ──
+  function bearingDeg(lat1,lon1,lat2,lon2){
+    const dLon=(lon2-lon1)*Math.PI/180,r1=lat1*Math.PI/180,r2=lat2*Math.PI/180;
+    return(Math.atan2(Math.sin(dLon)*Math.cos(r2),
+      Math.cos(r1)*Math.sin(r2)-Math.sin(r1)*Math.cos(r2)*Math.cos(dLon))*180/Math.PI+360)%360;
+  }
+  const FRIDAY_RADIUS=18; // km — apenas Franca e arredores imediatos ficam para sextas
   const blocos=Object.entries(porMun).map(([mun,cls])=>{
     const lat=cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length;
     const lon=cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length;
-    return {mun,clientes:[...cls],lat,lon,distHome:haversine(homeLat,homeLon,lat,lon)};
+    const distHome=haversine(homeLat,homeLon,lat,lon);
+    const bear=bearingDeg(homeLat,homeLon,lat,lon);
+    // 8 corredores de 45° (0=N,1=NE,2=E,3=SE,4=S,5=SO,6=O,7=NO)
+    const corredor=Math.floor(((bear+22.5)%360)/45);
+    return{mun,clientes:[...cls],lat,lon,distHome,bear,corredor,isLocal:distHome<=FRIDAY_RADIUS};
   });
-  const tamMun={}; // total de clientes por cidade no pool
+  const tamMun={};
   blocos.forEach(b=>tamMun[b.mun]=b.clientes.length);
+
+  // Agrupa blocos REMOTOS em corredores angulares → ordena corredores por distância média DESC
+  const _corMap={};
+  blocos.filter(b=>!b.isLocal).forEach(b=>{
+    if(!_corMap[b.corredor]) _corMap[b.corredor]=[];
+    _corMap[b.corredor].push(b);
+  });
+  const corredores=Object.values(_corMap)
+    .map(bs=>{
+      bs.sort((a,z)=>z.distHome-a.distHome); // dentro do corredor: longe→perto
+      return{bs,avgDist:bs.reduce((s,b)=>s+b.distHome,0)/bs.length};
+    })
+    .sort((a,z)=>z.avgDist-a.avgDist); // corredor mais distante primeiro
 
   const MIN=CFG.minPorDia, MAX=CFG.maxPorDia;
 
   // ── 6. Dias a gerar ───────────────────────────────────────────
+  function _isSex(ds){const[y,m,d]=ds.split('-').map(Number);return new Date(y,m-1,d).getDay()===5;}
+  // Dias atuais/futuros primeiro → C1 preenche o período real de trabalho.
+  // Dias passados do mês (simulados ou sem rota) ficam no fim → recebem sobra de C1 e revisitas de C2.
   const diasGerar=[
-    ...util.filter(d=>d<hojeStr&&(!roteiro[d]||roteiro[d]._simulado)), // passados sem rota real
-    ...util.filter(d=>d>=hojeStr)               // hoje + futuros
+    ...util.filter(d=>d>=hojeStr),
+    ...util.filter(d=>d<hojeStr&&(!roteiro[d]||roteiro[d]._simulado))
   ];
   if(!diasGerar.length){roteiro=novoRot;salvar();renderTudo();return;}
+  const plano=diasGerar.map(d=>({data:d,clientes:[],simulado:d<hojeStr,isSexta:_isSex(d)}));
 
-  // Plano: [{data, clientes:[], simulado}]
-  const plano=diasGerar.map(d=>({data:d,clientes:[],simulado:d<hojeStr}));
-
-  // ── 7. CICLO 1: clientes não visitados no mês ─────────────────
+  // ── 7. CICLO 1: clientes não visitados ───────────────────────
   const jaVisitados=new Set(Object.keys(histVisitas));
 
-  const blocosC1=blocos
-    .map(b=>({...b,clientes:b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja))}))
-    .filter(b=>b.clientes.length>0)
-    .sort((a,b)=>b.distHome-a.distHome); // LONGE → PERTO
-
-  // Cidade B está "no caminho" de home → cidade A (detour ≤ 30%)
-  function noCaminho(aLat,aLon,bLat,bLon){
-    const d=haversine(homeLat,homeLon,aLat,aLon);
-    if(d<1) return false;
-    return haversine(homeLat,homeLon,bLat,bLon)+haversine(bLat,bLon,aLat,aLon)<=d*1.3;
+  // NN dentro de uma cidade
+  function nnOrdem(cls,sLat,sLon){
+    let rem=[...cls],res=[],cLat=sLat,cLon=sLon;
+    while(rem.length){
+      let best=rem[0],bd=Infinity;
+      rem.forEach(c=>{const d=haversine(cLat,cLon,+c.latitude,+c.longitude);if(d<bd){bd=d;best=c;}});
+      res.push(best);cLat=+best.latitude;cLon=+best.longitude;
+      rem=rem.filter(c=>c!==best);
+    }
+    return res;
   }
 
-  // ── 8. Distribui C1 em dias ──────────────────────────────────
-  // Percorre blocos (longe→perto) preenchendo cada dia até MAX antes de avançar.
-  // Cidades grandes → múltiplos dias consecutivos.
-  // Cidades pequenas → compartilham o dia com a cidade geográfica seguinte.
+  // ── 8a. C1 REMOTO → dias NÃO-sexta (varredura angular greedy) ──
+  // Âncora na cidade mais distante restante → agrupa tudo dentro de 50° dessa direção.
+  // Cada grupo preenche dias consecutivos. Ao esgotar o grupo, fecha o dia se ≥ MIN.
+  const planoOutros=plano.filter(p=>!p.isSexta);
   {
-    const filaC1=blocosC1.map(b=>{
-      // NN dentro de cada cidade para minimizar deslocamento interno
-      let rem=[...b.clientes],result=[],cLat=b.lat,cLon=b.lon;
-      while(rem.length){
-        let best=rem[0],bd=Infinity;
-        rem.forEach(c=>{const d=haversine(cLat,cLon,+c.latitude,+c.longitude);if(d<bd){bd=d;best=c;}});
-        result.push(best);cLat=+best.latitude;cLon=+best.longitude;
-        rem=rem.filter(c=>c!==best);
-      }
-      return {...b,clientes:result};
-    });
+    const ANGULAR_TOL=20; // graus de tolerância por corredor
+    // Blocos remotos com C1 pendentes, por distância DESC
+    let restantes=blocos
+      .filter(b=>!b.isLocal)
+      .map(b=>({...b,clientes:nnOrdem(b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja)),b.lat,b.lon)}))
+      .filter(b=>b.clientes.length>0)
+      .sort((a,z)=>z.distHome-a.distHome);
 
+    // Constrói grupos greedy por direção
+    const grupos=[];
+    while(restantes.length>0){
+      const bearAncora=restantes[0].bear;
+      const grupo=[],fora=[];
+      restantes.forEach(b=>{
+        let diff=Math.abs(b.bear-bearAncora);
+        if(diff>180) diff=360-diff;
+        (diff<=ANGULAR_TOL?grupo:fora).push(b);
+      });
+      grupo.sort((a,z)=>z.distHome-a.distHome);
+      grupos.push(grupo);
+      restantes=fora.sort((a,z)=>z.distHome-a.distHome);
+    }
+
+    // Pós-processamento: mescla grupos com < MIN clientes no grupo angularmente mais próximo
+    function _angDiff2(a,b){const d=Math.abs(a-b);return d>180?360-d:d;}
+    function _avgBear(g){return g.reduce((s,b)=>s+b.bear,0)/g.length;}
+    for(let i=grupos.length-1;i>=0;i--){
+      const total=grupos[i].reduce((s,b)=>s+b.clientes.length,0);
+      if(total<MIN&&grupos.length>1){
+        const ab=_avgBear(grupos[i]);
+        let nearest=-1,nearDist=Infinity;
+        grupos.forEach((g,gi)=>{if(gi===i)return;const d=_angDiff2(ab,_avgBear(g));if(d<nearDist){nearDist=d;nearest=gi;}});
+        if(nearest>=0){grupos[nearest].push(...grupos[i]);grupos[nearest].sort((a,z)=>z.distHome-a.distHome);grupos.splice(i,1);}
+      }
+    }
+
+    // Distribui cada grupo em dias consecutivos
+    let dPtr=0;
+    grupos.forEach(grupo=>{
+      let bi=0;
+      while(bi<grupo.length&&dPtr<planoOutros.length){
+        const bloco=grupo[bi];
+        if(!bloco.clientes.length){bi++;continue;}
+        const dia=planoOutros[dPtr];
+        const take=Math.min(bloco.clientes.length,MAX-dia.clientes.length);
+        dia.clientes.push(...bloco.clientes.splice(0,take));
+        if(!bloco.clientes.length) bi++;
+        if(dia.clientes.length>=MAX) dPtr++;
+      }
+      // Grupo esgotado → fecha dia atual (qualquer qtd), próximo grupo começa dia novo
+      if(dPtr<planoOutros.length&&planoOutros[dPtr].clientes.length>0) dPtr++;
+    });
+    if(dPtr<planoOutros.length&&planoOutros[dPtr].clientes.length>0) dPtr++;
+    if(dPtr>0&&planoOutros[dPtr-1].clientes.length>0&&planoOutros[dPtr-1].clientes.length<MIN) dPtr--;
+    window._c1dPtr=dPtr;
+    window._grupos=grupos;
+  }
+
+  // ── 8b. C1 LOCAL → dias SEXTA ────────────────────────────────
+  const planoSexta=plano.filter(p=>p.isSexta);
+  {
+    const filaLocalC1=blocos
+      .filter(b=>b.isLocal)
+      .map(b=>{
+        const c1s=b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja));
+        return c1s.length?{...b,clientes:nnOrdem(c1s,b.lat,b.lon)}:null;
+      })
+      .filter(Boolean)
+      .sort((a,z)=>z.distHome-a.distHome);
     let bi=0,dPtr=0;
-    while(bi<filaC1.length&&dPtr<plano.length){
-      const bloco=filaC1[bi];
+    while(bi<filaLocalC1.length&&dPtr<planoSexta.length){
+      const bloco=filaLocalC1[bi];
       if(!bloco.clientes.length){bi++;continue;}
-      const dia=plano[dPtr];
+      const dia=planoSexta[dPtr];
       const take=Math.min(bloco.clientes.length,MAX-dia.clientes.length);
       dia.clientes.push(...bloco.clientes.splice(0,take));
-      if(!bloco.clientes.length) bi++;       // bloco esgotado → próximo bloco mesmo dia
-      if(dia.clientes.length>=MAX) dPtr++;    // dia cheio → próximo dia
+      if(!bloco.clientes.length) bi++;
+      if(dia.clientes.length>=MAX) dPtr++;
     }
-    // Dia final parcial (< MIN): deixa no plano para o C2 completar
-    if(dPtr<plano.length&&plano[dPtr].clientes.length>0) dPtr++;
-    // Se o último dia C1 tem < MIN clientes, C2 vai incluí-lo
-    if(dPtr>0&&plano[dPtr-1].clientes.length>0&&plano[dPtr-1].clientes.length<MIN) dPtr--;
-    window._c1dPtr=dPtr;
+    window._c1dPtrSexta=dPtr;
   }
   const dPtrC1=window._c1dPtr||0;
+  const dPtrC1Sexta=window._c1dPtrSexta||0;
 
-  // ── 9. CICLO 2: revisitas (longe→perto, score) ───────────────
-  if(dPtrC1<plano.length){
-    function scoreC(c){
-      return ((+c.fat_12m||0)/12)*0.5+(+c.mix_produtos||0)*20+(diasSemPedido(c)||0)*0.3;
+  // ── 9. CICLO 2: revisitas ─────────────────────────────────────
+  function scoreC(c){
+    return((+c.fat_12m||0)/12)*0.5+(+c.mix_produtos||0)*20+(diasSemPedido(c)||0)*0.3;
+  }
+
+  // 9a. Revisitas REMOTAS → corridor-aware: prioriza cidades na mesma direção do dia
+  if(dPtrC1<planoOutros.length){
+    // C2 blocos: clientes originais (todos), ordem dos grupos C1
+    const _munOrdem=(window._grupos||[]).flatMap(g=>g.map(b=>b.mun));
+    const c2Blocos=_munOrdem
+      .map(mun=>blocos.find(b=>b.mun===mun))
+      .filter(Boolean)
+      .map(b=>({...b,clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}));
+    const c2Orig=c2Blocos.map(b=>({...b,clientes:[...b.clientes]}));
+
+    // Bearing médio dos clientes já no dia
+    function diaBearing(dia){
+      const vis=dia.clientes.filter(c=>c.latitude&&c.longitude);
+      if(!vis.length) return -1;
+      return vis.reduce((s,c)=>s+bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude),0)/vis.length;
     }
-    // Blocos de revisita: mesma ordenação longe→perto
-    const filaC2=blocos
-      .map(b=>({...b,clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}))
-      .sort((a,b)=>b.distHome-a.distHome)
-      .map(b=>({...b,clientes:[...b.clientes]}));
+    function angDiff(a,b){const d=Math.abs(a-b);return d>180?360-d:d;}
 
     let c2Idx=0;
-    // Guarda cópia para reinício de sub-ciclo
-    const filaC2orig=filaC2.map(b=>({...b,clientes:[...b.clientes]}));
+    for(let di=0;di<planoOutros.length;di++){
+      const dia=planoOutros[di];
+      if(dia.clientes.length>=MAX) continue;
 
-    for(let di=dPtrC1;di<plano.length;di++){
-      const dia=plano[di];
-      if(dia.clientes.length>=MAX) continue; // dia já cheio
+      const dBear=diaBearing(dia);
 
-      // Se o dia já tem clientes (tail do C1), prioriza mesma cidade nas revisitas
+      // 1. Prioridade: mesma cidade (revisita — exclui duplicatas de referência)
+      const _jaIds=new Set(dia.clientes.map(c=>c.cod_cliente+'_'+c.loja));
       const munsJaDia=new Set(dia.clientes.map(c=>c._mun||c.municipio));
       if(munsJaDia.size>0){
-        // Completa com revisitas das mesmas cidades primeiro
-        for(let bi2=0;bi2<filaC2.length&&dia.clientes.length<MIN;bi2++){
-          if(!munsJaDia.has(filaC2[bi2].mun)) continue;
-          const b2=filaC2[bi2];
-          const n2=Math.min(b2.clientes.length,MIN-dia.clientes.length);
-          if(n2>0) dia.clientes.push(...b2.clientes.splice(0,n2));
+        for(let bi2=0;bi2<c2Blocos.length&&dia.clientes.length<MIN;bi2++){
+          if(!munsJaDia.has(c2Blocos[bi2].mun)) continue;
+          c2Blocos[bi2].clientes=c2Blocos[bi2].clientes.filter(c=>!_jaIds.has(c.cod_cliente+'_'+c.loja));
+          const n=Math.min(c2Blocos[bi2].clientes.length,MIN-dia.clientes.length);
+          if(n>0) dia.clientes.push(...c2Blocos[bi2].clientes.splice(0,n));
         }
-        if(dia.clientes.length>=MIN) continue; // dia preenchido
+        if(dia.clientes.length>=MIN) continue;
       }
 
+      // 2. Mesma direção (≤30° de diferença de bearing)
+      if(dBear>=0){
+        c2Blocos.forEach((b,i)=>{
+          if(dia.clientes.length>=MIN) return;
+          if(angDiff(b.bear,dBear)>30) return;
+          const n=Math.min(b.clientes.length,MIN-dia.clientes.length);
+          if(n>0) dia.clientes.push(...c2Blocos[i].clientes.splice(0,n));
+        });
+        if(dia.clientes.length>=MIN) continue;
+      }
+
+      // 3. Fallback: qualquer cidade até MAX (ordem da fila)
       while(dia.clientes.length<MAX){
-        if(c2Idx>=filaC2.length){
-          // Reinicia sub-ciclo de revisitas
-          filaC2.forEach((b,i)=>{filaC2[i].clientes=[...filaC2orig[i].clientes];});
+        if(c2Idx>=c2Blocos.length){
+          c2Blocos.forEach((b,i)=>{c2Blocos[i].clientes=[...c2Orig[i].clientes];});
           c2Idx=0;
         }
-        const b=filaC2[c2Idx];
+        const b=c2Blocos[c2Idx];
+        if(!b.clientes.length){c2Idx++;continue;}
+        const n=Math.min(b.clientes.length,MAX-dia.clientes.length);
+        dia.clientes.push(...b.clientes.splice(0,n));
+        if(!b.clientes.length) c2Idx++;
+        if(dia.clientes.length>=MIN) break;
+      }
+    }
+  }
+
+  // 9b. Revisitas LOCAIS → sextas
+  if(dPtrC1Sexta<planoSexta.length){
+    const filaC2L=blocos
+      .filter(b=>b.isLocal)
+      .map(b=>({...b,clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}))
+      .sort((a,z)=>z.distHome-a.distHome);
+    const filaC2Lorig=filaC2L.map(b=>({...b,clientes:[...b.clientes]}));
+    let c2Idx=0;
+    for(let di=dPtrC1Sexta;di<planoSexta.length;di++){
+      const dia=planoSexta[di];
+      if(dia.clientes.length>=MAX) continue;
+      while(dia.clientes.length<MAX){
+        if(c2Idx>=filaC2L.length){
+          filaC2L.forEach((b,i)=>{filaC2L[i].clientes=[...filaC2Lorig[i].clientes];});
+          c2Idx=0;
+        }
+        const b=filaC2L[c2Idx];
         if(!b.clientes.length){c2Idx++;continue;}
         const n=Math.min(b.clientes.length,MAX-dia.clientes.length);
         dia.clientes.push(...b.clientes.splice(0,n));
