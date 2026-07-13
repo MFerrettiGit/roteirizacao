@@ -429,7 +429,12 @@ async function init(){
   const tema=localStorage.getItem('ferretti_tema')||'light';
   document.documentElement.setAttribute('data-theme',tema);
   document.getElementById('btnTema').textContent=tema==='dark'?'☀️ Claro':'🌙 Escuro';
-  carregarEstado(); renderTudo(); selecionarDia(new Date());
+  carregarEstado();
+  // Sem histórico real de visitas: regenera SEMPRE do zero ao carregar, para que
+  // o site reflita a lógica atual do motor (senão dias passados salvos por versões
+  // antigas do código ficam congelados e exibem rotas que já não valem).
+  gerarRoteiro(true);
+  selecionarDia(new Date());
 }
 
 function toggleTema(){
