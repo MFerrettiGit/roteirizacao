@@ -783,24 +783,37 @@ function gerarRoteiro(forceAll=false){
       dPtr++;
     });
 
-    // ── Completa dias curtos (<MIN) com o cliente MAIS PERTO DE CASA disponível ──
+    // ── Completa dias curtos (<MIN) com o cliente que fica NO CAMINHO DE VOLTA ──
     // Quando um corredor rende um dia abaixo de MIN (ex.: Miguelópolis sozinha após
-    // separar de Ituverava), em vez de misturar outro corredor, encaixa um cliente
-    // pertinho de casa: entra perto do fim da rota (retorno), custo mínimo.
+    // separar de Ituverava), encaixa o cliente que menos desvia a perna final da
+    // rota (último cliente → casa): menor desvio = mais perto do fim indo pra casa.
     {
       const jaRem=new Set();
       planoOutros.forEach(d=>d.clientes.forEach(c=>jaRem.add(c.cod_cliente+'_'+c.loja)));
-      const fillers=pool
-        .filter(c=>{const id=c.cod_cliente+'_'+c.loja;return !jaRem.has(id)&&!jaVisitados.has(id);})
-        .map(c=>({c,dh:haversine(homeLat,homeLon,+c.latitude,+c.longitude)}))
-        .sort((a,z)=>a.dh-z.dh);
-      let fi=0;
+      const disponiveis=pool.filter(c=>{const id=c.cod_cliente+'_'+c.loja;return !jaRem.has(id)&&!jaVisitados.has(id);});
+      const usado=new Set();
       for(let di=0;di<dPtr;di++){
         const dia=planoOutros[di];
-        while(dia.clientes.length>0&&dia.clientes.length<MIN&&fi<fillers.length){
-          const f=fillers[fi++];
-          dia.clientes.push(f.c);
-          usadosFill.add(f.c.cod_cliente+'_'+f.c.loja);
+        while(dia.clientes.length>0&&dia.clientes.length<MIN){
+          // último cliente no sentido da volta = o do dia mais perto de casa
+          let ult=null,ultDH=Infinity;
+          dia.clientes.forEach(c=>{const dh=haversine(homeLat,homeLon,+c.latitude,+c.longitude);if(dh<ultDH){ultDH=dh;ult=c;}});
+          const dUH=haversine(homeLat,homeLon,+ult.latitude,+ult.longitude);
+          // candidato MAIS PRÓXIMO do último cliente, no sentido da volta (mais perto
+          // de casa que o último). Mantém o dia compacto em vez de saltar pra casa.
+          let best=null,bestD=Infinity,bestAny=null,bestAnyD=Infinity;
+          disponiveis.forEach(c=>{
+            const id=c.cod_cliente+'_'+c.loja;if(usado.has(id))return;
+            const dUC=haversine(+ult.latitude,+ult.longitude,+c.latitude,+c.longitude);
+            const dCH=haversine(homeLat,homeLon,+c.latitude,+c.longitude);
+            if(dUC<bestAnyD){bestAnyD=dUC;bestAny=c;}
+            if(dCH<dUH&&dUC<bestD){bestD=dUC;best=c;} // na direção de casa
+          });
+          best=best||bestAny; // se nenhum estiver no sentido da volta, pega o mais próximo do último
+          if(!best) break;
+          dia.clientes.push(best);
+          usado.add(best.cod_cliente+'_'+best.loja);
+          usadosFill.add(best.cod_cliente+'_'+best.loja);
         }
       }
     }
