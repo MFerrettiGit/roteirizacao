@@ -656,7 +656,8 @@ function gerarRoteiro(){
         const ab=_avgBear(grupos[i]);
         let nearest=-1,nearDist=Infinity;
         grupos.forEach((g,gi)=>{if(gi===i)return;const d=_angDiff2(ab,_avgBear(g));if(d<nearDist){nearDist=d;nearest=gi;}});
-        if(nearest>=0){grupos[nearest].push(...grupos[i]);grupos[nearest].sort((a,z)=>z.distHome-a.distHome);grupos.splice(i,1);}
+        // Não mescla com grupo em direção oposta (>90°): prefere dia com poucos clientes a zigzague
+        if(nearest>=0&&nearDist<=90){grupos[nearest].push(...grupos[i]);grupos[nearest].sort((a,z)=>z.distHome-a.distHome);grupos.splice(i,1);}
       }
     }
 
@@ -857,13 +858,24 @@ function gerarRoteiro(){
       if(!porCidDia[m]){porCidDia[m]=[];ordCid.push(m);}
       porCidDia[m].push(c);
     });
+    // NN inter-cidade: após terminar cada cidade, vai para a mais próxima restante
     const ordenados=[];
     let cLat=homeLat,cLon=homeLon;
-    ordCid.forEach(m=>{
-      const s=nnCity(porCidDia[m],cLat,cLon);
+    const remCids=[...ordCid];
+    while(remCids.length){
+      let bestCid=remCids[0],bestDist=Infinity;
+      remCids.forEach(m=>{
+        const cls=porCidDia[m];
+        const aLat=cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length;
+        const aLon=cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length;
+        const d=haversine(cLat,cLon,aLat,aLon);
+        if(d<bestDist){bestDist=d;bestCid=m;}
+      });
+      const s=nnCity(porCidDia[bestCid],cLat,cLon);
       ordenados.push(...s);
       if(s.length){cLat=+s[s.length-1].latitude;cLon=+s[s.length-1].longitude;}
-    });
+      remCids.splice(remCids.indexOf(bestCid),1);
+    }
 
     // Slots com horários
     const slots=[];
