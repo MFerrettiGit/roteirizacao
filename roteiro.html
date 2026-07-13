@@ -502,7 +502,7 @@ function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.
 // Ciclo 2: revisitas (mesma ordem, melhores clientes por score)
 // Mesma cidade → dias consecutivos | MIN 5 / MAX 8 por dia
 // ══════════════════════════════════════════════════════════════
-function gerarRoteiro(){
+function gerarRoteiro(forceAll=false){
   const ano=mesSel.getFullYear(), mes=mesSel.getMonth();
   const hojeStr=ds(new Date());
   const util=window._util=diasUteis(ano,mes);
@@ -601,14 +601,13 @@ function gerarRoteiro(){
 
   // ── 6. Dias a gerar ───────────────────────────────────────────
   function _isSex(ds){const[y,m,d]=ds.split('-').map(Number);return new Date(y,m-1,d).getDay()===5;}
-  // Dias atuais/futuros primeiro → C1 preenche o período real de trabalho.
-  // Dias passados do mês (simulados ou sem rota) ficam no fim → recebem sobra de C1 e revisitas de C2.
-  const diasGerar=[
-    ...util.filter(d=>d>=hojeStr),
-    ...util.filter(d=>d<hojeStr&&(!roteiro[d]||roteiro[d]._simulado))
-  ];
+  // forceAll: regenera todos os dias do mês (inclusive passados).
+  // Normal: futuros primeiro; passados só se simulados ou sem rota salva.
+  const diasGerar=forceAll
+    ? [...util.filter(d=>d>=hojeStr),...util.filter(d=>d<hojeStr)]
+    : [...util.filter(d=>d>=hojeStr),...util.filter(d=>d<hojeStr&&(!roteiro[d]||roteiro[d]._simulado))];
   if(!diasGerar.length){roteiro=novoRot;salvar();renderTudo();return;}
-  const plano=diasGerar.map(d=>({data:d,clientes:[],simulado:d<hojeStr,isSexta:_isSex(d)}));
+  const plano=diasGerar.map(d=>({data:d,clientes:[],simulado:!forceAll&&d<hojeStr,isSexta:_isSex(d)}));
 
   // ── 7. CICLO 1: clientes não visitados ───────────────────────
   const jaVisitados=new Set(Object.keys(histVisitas));
@@ -625,66 +624,123 @@ function gerarRoteiro(){
     return res;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // MOTOR DE DECISÃO — gera candidatos, dá nota, escolhe o melhor.
+  // Cada DIA = uma fatia angular (wedge) saindo de Franca. Testar
+  // muitos cortes e ficar com o de menor nota elimina o zigue-zague
+  // por construção e mantém cidades do mesmo corredor juntas.
+  // ══════════════════════════════════════════════════════════════
+  const W_ZZ=2.0;   // km-equivalente por grau de abertura angular do dia (pune zigue-zague)
+  const W_BAL=3.0;  // km-equivalente por cliente de desequilíbrio entre dias
+
+  // Menor arco (em graus) que cobre todos os rumos de um dia
+  function _spanAngular(bears){
+    if(bears.length<=1) return 0;
+    const s=[...bears].sort((a,b)=>a-b);
+    let maxGap=(360-s[s.length-1])+s[0];
+    for(let i=1;i<s.length;i++) maxGap=Math.max(maxGap,s[i]-s[i-1]);
+    return 360-maxGap;
+  }
+  // Ordena unidades (cidades) por vizinho-mais-próximo a partir de casa
+  function _nnUnidades(units,sLat,sLon){
+    let rem=[...units],res=[],cLat=sLat,cLon=sLon;
+    while(rem.length){
+      let best=rem[0],bd=Infinity;
+      rem.forEach(u=>{const d=haversine(cLat,cLon,u.lat,u.lon);if(d<bd){bd=d;best=u;}});
+      res.push(best);cLat=best.lat;cLon=best.lon;
+      rem=rem.filter(u=>u!==best);
+    }
+    return res;
+  }
+  // Comprimento da rota do dia: casa → cidades (NN) → casa
+  function _rotaLen(units,sLat,sLon){
+    const ord=_nnUnidades(units,sLat,sLon);
+    let d=0,cLat=sLat,cLon=sLon;
+    ord.forEach(u=>{d+=haversine(cLat,cLon,u.lat,u.lon);cLat=u.lat;cLon=u.lon;});
+    d+=haversine(cLat,cLon,sLat,sLon);
+    return d;
+  }
+  // Otimizador principal: recebe blocos-cidade e nº de dias disponíveis,
+  // devolve array de dias {blocos:[...], clientes:[...]} minimizando a nota.
+  function otimizarWedges(blcs,maxDias,MAX,MIN,hLat,hLon){
+    if(!blcs.length||maxDias<=0) return [];
+    // 1. Quebra cidades maiores que MAX em sub-unidades (mantém ordem NN interna)
+    const units=[];
+    blcs.forEach(b=>{
+      if(b.clientes.length<=MAX){units.push(b);}
+      else{for(let i=0;i<b.clientes.length;i+=MAX){units.push({...b,clientes:b.clientes.slice(i,i+MAX)});}}
+    });
+    // 2. Ordena por rumo (varredura angular)
+    const byBear=[...units].sort((a,z)=>a.bear-z.bear);
+    const n=byBear.length;
+    const totalCli=byBear.reduce((s,u)=>s+u.clientes.length,0);
+
+    // Constrói uma partição a partir de um offset de rotação e uma meta de carga/dia
+    function build(offset,target){
+      const seq=byBear.slice(offset).concat(byBear.slice(0,offset));
+      const dias=[];let cur=[],curN=0;
+      for(const u of seq){
+        if(curN>0&&curN+u.clientes.length>MAX){dias.push(cur);cur=[];curN=0;}
+        cur.push(u);curN+=u.clientes.length;
+        if(curN>=target){dias.push(cur);cur=[];curN=0;}
+      }
+      if(cur.length) dias.push(cur);
+      return dias;
+    }
+    function nota(dias){
+      if(dias.length>maxDias) return Infinity;
+      const avg=totalCli/dias.length;
+      let travel=0,zz=0,bal=0;
+      dias.forEach(d=>{
+        zz+=_spanAngular(d.map(u=>u.bear));
+        travel+=_rotaLen(d,hLat,hLon);
+        const cnt=d.reduce((s,u)=>s+u.clientes.length,0);
+        bal+=Math.abs(cnt-avg);
+      });
+      return travel+zz*W_ZZ+bal*W_BAL;
+    }
+    // 3. Gera candidatos: cada offset de início × cada meta de carga em [MIN,MAX]
+    let best=null,bestSc=Infinity,nCand=0;
+    for(let off=0;off<n;off++){
+      for(let t=MIN;t<=MAX;t++){
+        const d=build(off,t);nCand++;
+        const sc=nota(d);
+        if(sc<bestSc){bestSc=sc;best=d;}
+      }
+    }
+    if(!best) best=build(0,MAX);
+    window._motorInfo={nCand,nota:Math.round(bestSc)};
+    // 4. Dentro de cada dia: ordena cidades por NN e concatena clientes
+    return best.map(d=>{
+      const ord=_nnUnidades(d,hLat,hLon);
+      const clientes=[];ord.forEach(u=>clientes.push(...u.clientes));
+      return{blocos:ord,clientes};
+    });
+  }
+
   // ── 8a. C1 REMOTO → dias NÃO-sexta (varredura angular greedy) ──
   // Âncora na cidade mais distante restante → agrupa tudo dentro de 50° dessa direção.
   // Cada grupo preenche dias consecutivos. Ao esgotar o grupo, fecha o dia se ≥ MIN.
   const planoOutros=plano.filter(p=>!p.isSexta);
   {
-    const ANGULAR_TOL=20; // graus de tolerância por corredor
-    // Blocos remotos com C1 pendentes, por distância DESC
-    let restantes=blocos
+    // Blocos remotos com C1 pendentes (clientes ordenados por NN interno)
+    const remBlocos=blocos
       .filter(b=>!b.isLocal)
-      .map(b=>({...b,clientes:nnOrdem(b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja)),b.lat,b.lon)}))
-      .filter(b=>b.clientes.length>0)
-      .sort((a,z)=>z.distHome-a.distHome);
+      .map(b=>({mun:b.mun,lat:b.lat,lon:b.lon,bear:b.bear,distHome:b.distHome,
+                clientes:nnOrdem(b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja)),b.lat,b.lon)}))
+      .filter(b=>b.clientes.length>0);
 
-    // Constrói grupos greedy por direção
-    const grupos=[];
-    while(restantes.length>0){
-      const bearAncora=restantes[0].bear;
-      const grupo=[],fora=[];
-      restantes.forEach(b=>{
-        let diff=Math.abs(b.bear-bearAncora);
-        if(diff>180) diff=360-diff;
-        (diff<=ANGULAR_TOL?grupo:fora).push(b);
-      });
-      grupo.sort((a,z)=>z.distHome-a.distHome);
-      grupos.push(grupo);
-      restantes=fora.sort((a,z)=>z.distHome-a.distHome);
-    }
+    // MOTOR: parte os blocos em dias-fatia otimizados por nota
+    const dias=otimizarWedges(remBlocos,planoOutros.length,MAX,MIN,homeLat,homeLon);
 
-    // Pós-processamento: mescla grupos com < MIN clientes no grupo angularmente mais próximo
-    function _angDiff2(a,b){const d=Math.abs(a-b);return d>180?360-d:d;}
-    function _avgBear(g){return g.reduce((s,b)=>s+b.bear,0)/g.length;}
-    for(let i=grupos.length-1;i>=0;i--){
-      const total=grupos[i].reduce((s,b)=>s+b.clientes.length,0);
-      if(total<MIN&&grupos.length>1){
-        const ab=_avgBear(grupos[i]);
-        let nearest=-1,nearDist=Infinity;
-        grupos.forEach((g,gi)=>{if(gi===i)return;const d=_angDiff2(ab,_avgBear(g));if(d<nearDist){nearDist=d;nearest=gi;}});
-        // Não mescla grupos >45° de diferença: corredor adjacente OK, direção diferente não
-        if(nearest>=0&&nearDist<=45){grupos[nearest].push(...grupos[i]);grupos[nearest].sort((a,z)=>z.distHome-a.distHome);grupos.splice(i,1);}
-      }
-    }
-
-    // Distribui cada grupo em dias consecutivos
     let dPtr=0;
-    grupos.forEach(grupo=>{
-      let bi=0;
-      while(bi<grupo.length&&dPtr<planoOutros.length){
-        const bloco=grupo[bi];
-        if(!bloco.clientes.length){bi++;continue;}
-        const dia=planoOutros[dPtr];
-        const take=Math.min(bloco.clientes.length,MAX-dia.clientes.length);
-        dia.clientes.push(...bloco.clientes.splice(0,take));
-        if(!bloco.clientes.length) bi++;
-        if(dia.clientes.length>=MAX) dPtr++;
-      }
-      // Grupo esgotado → fecha dia atual (qualquer qtd), próximo grupo começa dia novo
-      if(dPtr<planoOutros.length&&planoOutros[dPtr].clientes.length>0) dPtr++;
+    const grupos=[];
+    dias.forEach(d=>{
+      if(dPtr>=planoOutros.length) return;
+      planoOutros[dPtr].clientes.push(...d.clientes);
+      grupos.push(d.blocos); // cada "grupo" = as cidades de um dia (ordem C2)
+      dPtr++;
     });
-    if(dPtr<planoOutros.length&&planoOutros[dPtr].clientes.length>0) dPtr++;
-    if(dPtr>0&&planoOutros[dPtr-1].clientes.length>0&&planoOutros[dPtr-1].clientes.length<MIN) dPtr--;
     window._grupos=grupos;
     window._c1dPtr=dPtr;
   }
@@ -701,37 +757,16 @@ function gerarRoteiro(){
       .filter(Boolean)
       .sort((a,z)=>z.distHome-a.distHome);
 
-    // Distribuição local:
-    // • Cidades pequenas: empacota sequencialmente até MAX (comportamento original).
-    // • Quando um bloco grande inicia um dia VAZIO e ainda precisa de ≥2 dias inteiros,
-    //   usa lat-sort para criar fatias geográficas coesas (evita corte no meio de uma zona).
-    let bi=0,dPtr=0;
-    while(bi<filaLocalC1.length&&dPtr<planoSexta.length){
-      const bloco=filaLocalC1[bi];
-      if(!bloco.clientes.length){bi++;continue;}
-      const dia=planoSexta[dPtr];
-      const daysNeeded=Math.ceil(bloco.clientes.length/MAX);
-      const freshLeft=planoSexta.slice(dPtr).filter(d=>!d.clientes.length).length;
-
-      if(dia.clientes.length===0&&daysNeeded>=2&&freshLeft>=2){
-        // Bloco grande arranca em dia vazio: fatia por latitude
-        const nDias=Math.min(daysNeeded,planoSexta.length-dPtr);
-        const sorted=[...bloco.clientes].sort((a,b)=>+a.latitude-+b.latitude);
-        const chunkSize=Math.ceil(sorted.length/nDias);
-        for(let ki=0;ki<nDias;ki++){
-          if(dPtr>=planoSexta.length) break;
-          const chunk=sorted.slice(ki*chunkSize,(ki+1)*chunkSize);
-          if(chunk.length) planoSexta[dPtr++].clientes.push(...nnOrdem(chunk,homeLat,homeLon).slice(0,MAX));
-        }
-        bloco.clientes=[];bi++;
-      } else {
-        // Empacotamento original: encaixa no dia atual e avança quando cheio
-        const take=Math.min(bloco.clientes.length,MAX-dia.clientes.length);
-        dia.clientes.push(...bloco.clientes.splice(0,take));
-        if(!bloco.clientes.length) bi++;
-        if(dia.clientes.length>=MAX) dPtr++;
-      }
-    }
+    // MOTOR: mesmo otimizador dos remotos. Como as cidades locais são
+    // próximas de casa, o critério dominante vira a compactação/equilíbrio.
+    const remLocal=filaLocalC1.map(b=>({mun:b.mun,lat:b.lat,lon:b.lon,bear:b.bear,distHome:b.distHome,clientes:[...b.clientes]}));
+    const diasL=otimizarWedges(remLocal,planoSexta.length,MAX,MIN,homeLat,homeLon);
+    let dPtr=0;
+    diasL.forEach(d=>{
+      if(dPtr>=planoSexta.length) return;
+      planoSexta[dPtr].clientes.push(...d.clientes);
+      dPtr++;
+    });
     window._c1dPtrSexta=dPtr;
   }
   const dPtrC1=window._c1dPtr||0;
@@ -1343,7 +1378,7 @@ function salvarAg(){if(!clienteAgendamento){alert('Selecione um cliente da lista
 
 // ── SENHA ─────────────────────────────────────────────────────
 function pedirSenha(){document.getElementById('senhaInput').value='';document.getElementById('senhaErr').style.display='none';document.getElementById('senhaOv').classList.add('show');setTimeout(()=>document.getElementById('senhaInput').focus(),100);}
-async function confirmarRoteiro(){const h=await sha256(document.getElementById('senhaInput').value);if(h!==hashSenha){document.getElementById('senhaErr').style.display='block';return;}document.getElementById('senhaOv').classList.remove('show');document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>Gerando roteiro...</p></div>';setTimeout(()=>gerarRoteiro(),80);}
+async function confirmarRoteiro(){const h=await sha256(document.getElementById('senhaInput').value);if(h!==hashSenha){document.getElementById('senhaErr').style.display='block';return;}document.getElementById('senhaOv').classList.remove('show');document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>Gerando roteiro...</p></div>';setTimeout(()=>gerarRoteiro(true),80);}
 document.getElementById('senhaInput').addEventListener('keydown',e=>{if(e.key==='Enter')confirmarRoteiro();});
 
 function setView(v){viewAtual=v;['dia','semana','mes','resumo'].forEach(x=>{document.getElementById('view'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('hidden',x!==v);document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('ativo',x===v);});renderViewAtual();}
