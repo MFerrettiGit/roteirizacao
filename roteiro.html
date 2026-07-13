@@ -497,6 +497,38 @@ function salvar(){
 function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.getItem(chv('ag'));roteiro=r?JSON.parse(r):{};agendamentos=a?JSON.parse(a):[];}
 
 // ══════════════════════════════════════════════════════════════
+// Ordenador de ROTA FECHADA (casa → paradas → casa), consciente da volta.
+// Substitui o vizinho-mais-próximo guloso: resolve o dia como um ciclo
+// (TSP com 2-opt) e orienta para IR AO PONTO MAIS DISTANTE PRIMEIRO e
+// recolher as paradas no caminho de volta, terminando perto de casa.
+//   items    : array de paradas
+//   coordOf  : item → [lat,lon]
+//   hLat,hLon: casa (depósito)
+function tourFechado(items,coordOf,hLat,hLon){
+  const n=items.length;
+  if(n<=1) return [...items];
+  const co=items.map(coordOf), H=[hLat,hLon];
+  const d=(a,b)=>haversine(a[0],a[1],b[0],b[1]);
+  // Ordem inicial: NN a partir de casa (só semente para o 2-opt)
+  let route=[],rem=items.map((_,i)=>i),cur=H;
+  while(rem.length){let bk=0,bd=Infinity;rem.forEach((ii,k)=>{const dd=d(cur,co[ii]);if(dd<bd){bd=dd;bk=k;}});route.push(rem[bk]);cur=co[rem[bk]];rem.splice(bk,1);}
+  // Custo do ciclo fechado incluindo casa nas duas pontas
+  const len=r=>{let t=d(H,co[r[0]]);for(let i=0;i<r.length-1;i++)t+=d(co[r[i]],co[r[i+1]]);return t+d(co[r[r.length-1]],H);};
+  // 2-opt: inverte segmentos enquanto reduzir o ciclo
+  let imp=true,cLen=len(route);
+  while(imp){imp=false;
+    for(let i=0;i<n-1;i++)for(let j=i+1;j<n;j++){
+      const nr=route.slice(0,i).concat(route.slice(i,j+1).reverse(),route.slice(j+1));
+      const nl=len(nr);
+      if(nl+1e-9<cLen){route=nr;cLen=nl;imp=true;}
+    }
+  }
+  // Orienta pela VOLTA: termina na parada mais perto de casa (última perna curta)
+  if(d(H,co[route[0]])<d(H,co[route[route.length-1]])) route.reverse();
+  return route.map(i=>items[i]);
+}
+
+// ══════════════════════════════════════════════════════════════
 // ALGORITMO DE ROTEIRIZAÇÃO v2
 // Ciclo 1: todos os clientes 1× (longe→perto da casa do vendedor)
 // Ciclo 2: revisitas (mesma ordem, melhores clientes por score)
@@ -513,7 +545,9 @@ function gerarRoteiro(forceAll=false){
   // ── 1. Dias passados com rota REAL salva → preserva intocável ─
   // Dias _simulado (gerados em memória mas não persistidos) são ignorados
   const histVisitas={}; // clienteId → Set<date> das visitas salvas
-  util.filter(d=>d<hojeStr).forEach(d=>{
+  // forceAll: regenera TUDO do zero — ignora histórico salvo (senão os dias
+  // passados poluem o histVisitas e jogam os futuros todos para revisita).
+  if(!forceAll) util.filter(d=>d<hojeStr).forEach(d=>{
     const slots=roteiro[d];
     if(slots&&!slots._simulado){
       novoRot[d]=slots;
@@ -899,24 +933,18 @@ function gerarRoteiro(forceAll=false){
       if(!porCidDia[m]){porCidDia[m]=[];ordCid.push(m);}
       porCidDia[m].push(c);
     });
-    // NN inter-cidade: após terminar cada cidade, vai para a mais próxima restante
+    // ROTA FECHADA inter-cidade: ordena as cidades como um ciclo (casa→…→casa),
+    // indo ao ponto mais distante primeiro e voltando recolhendo — não mais guloso.
+    const centroCid=m=>{const cls=porCidDia[m];return[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];};
+    const seqCid=tourFechado(ordCid,centroCid,homeLat,homeLon);
+    // Encadeia clientes: dentro de cada cidade, NN a partir da posição de chegada
     const ordenados=[];
     let cLat=homeLat,cLon=homeLon;
-    const remCids=[...ordCid];
-    while(remCids.length){
-      let bestCid=remCids[0],bestDist=Infinity;
-      remCids.forEach(m=>{
-        const cls=porCidDia[m];
-        const aLat=cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length;
-        const aLon=cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length;
-        const d=haversine(cLat,cLon,aLat,aLon);
-        if(d<bestDist){bestDist=d;bestCid=m;}
-      });
-      const s=nnCity(porCidDia[bestCid],cLat,cLon);
+    seqCid.forEach(m=>{
+      const s=nnCity(porCidDia[m],cLat,cLon);
       ordenados.push(...s);
       if(s.length){cLat=+s[s.length-1].latitude;cLon=+s[s.length-1].longitude;}
-      remCids.splice(remCids.indexOf(bestCid),1);
-    }
+    });
 
     // Slots com horários
     const slots=[];
