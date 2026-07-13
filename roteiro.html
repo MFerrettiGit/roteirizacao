@@ -202,6 +202,8 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .mapa-modal-head{padding:12px 18px;background:var(--azul);color:#fff;display:flex;align-items:center;justify-content:space-between;}
 .mapa-modal-head h3{font-size:.95rem;font-weight:700;}
 .mapa-close{background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:.95rem;}
+.mapa-nav{background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.2rem;line-height:1;display:flex;align-items:center;justify-content:center;}
+.mapa-nav:disabled{opacity:.3;cursor:default;}
 #mapaModal{flex:1;}
 
 /* MODAIS */
@@ -336,8 +338,12 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 <div class="mapa-overlay" id="mapaOverlay" onclick="if(event.target===this)fecharMapa()">
   <div class="mapa-modal">
     <div class="mapa-modal-head">
+      <button class="mapa-nav" id="mapaNavPrev" onclick="mapaNavDia(-1)" title="Dia anterior">‹</button>
       <h3 id="mapaTitle">Mapa do roteiro</h3>
-      <button class="mapa-close" onclick="fecharMapa()">✕</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="mapa-nav" id="mapaNavNext" onclick="mapaNavDia(1)" title="Próximo dia">›</button>
+        <button class="mapa-close" onclick="fecharMapa()">✕</button>
+      </div>
     </div>
     <div id="mapaModal"></div>
   </div>
@@ -499,7 +505,7 @@ function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.
 function gerarRoteiro(){
   const ano=mesSel.getFullYear(), mes=mesSel.getMonth();
   const hojeStr=ds(new Date());
-  const util=diasUteis(ano,mes);
+  const util=window._util=diasUteis(ano,mes);
 
   window._novoRot={};
   const novoRot=window._novoRot;
@@ -1254,9 +1260,26 @@ function renderResumo(){
 function abrirMapa(){
   if(!mapaInst){mapaInst=L.map('mapaModal');L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(mapaInst);}
   document.getElementById('mapaOverlay').classList.add('show');
-  setTimeout(()=>{mapaInst.invalidateSize();renderMapa();},200);
+  setTimeout(()=>{
+    mapaInst.invalidateSize();renderMapa();
+    const idx=(window._util||[]).indexOf(ds(diaSel));
+    document.getElementById('mapaNavPrev').disabled=idx<=0;
+    document.getElementById('mapaNavNext').disabled=idx>=(window._util||[]).length-1;
+  },200);
 }
 function fecharMapa(){document.getElementById('mapaOverlay').classList.remove('show');}
+function mapaNavDia(dir){
+  const u=window._util||[];
+  const idx=u.indexOf(ds(diaSel));
+  const next=u[idx+dir];
+  if(!next) return;
+  diaSel=new Date(next+'T12:00:00');
+  mapaInst.invalidateSize();
+  renderMapa();
+  const ni=u.indexOf(ds(diaSel));
+  document.getElementById('mapaNavPrev').disabled=ni<=0;
+  document.getElementById('mapaNavNext').disabled=ni>=u.length-1;
+}
 let _ml=[];
 function renderMapa(){
   _ml.forEach(l=>mapaInst.removeLayer(l));_ml=[];
