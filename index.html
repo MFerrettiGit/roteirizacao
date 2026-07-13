@@ -318,7 +318,9 @@ function mostrarGestor() {
 }
 
 function abrirRoteiro(setor, codVendedor, gestor = false) {
-  window.location.href = `roteiro.html?setor=${encodeURIComponent(setor)}&cod=${encodeURIComponent(codVendedor)}${gestor?'&gestor=1':''}`;
+  // _cb = cache-buster: garante que o login sempre carregue o roteiro.html novo
+  // (evita o navegador rodar JS antigo em cache após uma atualização do motor).
+  window.location.href = `roteiro.html?setor=${encodeURIComponent(setor)}&cod=${encodeURIComponent(codVendedor)}${gestor?'&gestor=1':''}&_cb=${Date.now()}`;
 }
 
 function logout() {
