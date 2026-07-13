@@ -709,12 +709,18 @@ function gerarRoteiro(forceAll=false){
     const n=byBear.length;
     const totalCli=byBear.reduce((s,u)=>s+u.clientes.length,0);
 
-    // Constrói uma partição a partir de um offset de rotação e uma meta de carga/dia
+    // Diferença angular circular entre dois rumos
+    const _angDif=(a,b)=>{const d=Math.abs(a-b);return d>180?360-d:d;};
+    const CORREDOR_GAP=13; // graus: salto maior que isto = corredor diferente → fecha o dia
+    // Constrói uma partição a partir de um offset de rotação e uma meta de carga/dia.
+    // Fecha o dia por CORREDOR (salto de rumo) e por TETO (capacidade).
     function build(offset,target){
       const seq=byBear.slice(offset).concat(byBear.slice(0,offset));
       const dias=[];let cur=[],curN=0;
       for(const u of seq){
-        if(curN>0&&curN+u.clientes.length>MAX){dias.push(cur);cur=[];curN=0;}
+        const prev=cur.length?cur[cur.length-1]:null;
+        const saltoCorredor=prev&&_angDif(prev.bear,u.bear)>CORREDOR_GAP;
+        if(curN>0&&(saltoCorredor||curN+u.clientes.length>MAX)){dias.push(cur);cur=[];curN=0;}
         cur.push(u);curN+=u.clientes.length;
         if(curN>=target){dias.push(cur);cur=[];curN=0;}
       }
@@ -756,6 +762,7 @@ function gerarRoteiro(forceAll=false){
   // Âncora na cidade mais distante restante → agrupa tudo dentro de 50° dessa direção.
   // Cada grupo preenche dias consecutivos. Ao esgotar o grupo, fecha o dia se ≥ MIN.
   const planoOutros=plano.filter(p=>!p.isSexta);
+  const usadosFill=new Set(); // clientes locais usados para completar dias remotos curtos
   {
     // Blocos remotos com C1 pendentes (clientes ordenados por NN interno)
     const remBlocos=blocos
@@ -775,6 +782,29 @@ function gerarRoteiro(forceAll=false){
       grupos.push(d.blocos); // cada "grupo" = as cidades de um dia (ordem C2)
       dPtr++;
     });
+
+    // ── Completa dias curtos (<MIN) com o cliente MAIS PERTO DE CASA disponível ──
+    // Quando um corredor rende um dia abaixo de MIN (ex.: Miguelópolis sozinha após
+    // separar de Ituverava), em vez de misturar outro corredor, encaixa um cliente
+    // pertinho de casa: entra perto do fim da rota (retorno), custo mínimo.
+    {
+      const jaRem=new Set();
+      planoOutros.forEach(d=>d.clientes.forEach(c=>jaRem.add(c.cod_cliente+'_'+c.loja)));
+      const fillers=pool
+        .filter(c=>{const id=c.cod_cliente+'_'+c.loja;return !jaRem.has(id)&&!jaVisitados.has(id);})
+        .map(c=>({c,dh:haversine(homeLat,homeLon,+c.latitude,+c.longitude)}))
+        .sort((a,z)=>a.dh-z.dh);
+      let fi=0;
+      for(let di=0;di<dPtr;di++){
+        const dia=planoOutros[di];
+        while(dia.clientes.length>0&&dia.clientes.length<MIN&&fi<fillers.length){
+          const f=fillers[fi++];
+          dia.clientes.push(f.c);
+          usadosFill.add(f.c.cod_cliente+'_'+f.c.loja);
+        }
+      }
+    }
+
     window._grupos=grupos;
     window._c1dPtr=dPtr;
   }
