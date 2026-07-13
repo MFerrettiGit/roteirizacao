@@ -678,8 +678,8 @@ function gerarRoteiro(){
     });
     if(dPtr<planoOutros.length&&planoOutros[dPtr].clientes.length>0) dPtr++;
     if(dPtr>0&&planoOutros[dPtr-1].clientes.length>0&&planoOutros[dPtr-1].clientes.length<MIN) dPtr--;
-    window._c1dPtr=dPtr;
     window._grupos=grupos;
+    window._c1dPtr=dPtr;
   }
 
   // ── 8b. C1 LOCAL → dias SEXTA ────────────────────────────────
@@ -689,19 +689,41 @@ function gerarRoteiro(){
       .filter(b=>b.isLocal)
       .map(b=>{
         const c1s=b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja));
-        return c1s.length?{...b,clientes:nnOrdem(c1s,b.lat,b.lon)}:null;
+        return c1s.length?{...b,clientes:c1s}:null;
       })
       .filter(Boolean)
       .sort((a,z)=>z.distHome-a.distHome);
+
+    // Distribuição local:
+    // • Cidades pequenas: empacota sequencialmente até MAX (comportamento original).
+    // • Quando um bloco grande inicia um dia VAZIO e ainda precisa de ≥2 dias inteiros,
+    //   usa lat-sort para criar fatias geográficas coesas (evita corte no meio de uma zona).
     let bi=0,dPtr=0;
     while(bi<filaLocalC1.length&&dPtr<planoSexta.length){
       const bloco=filaLocalC1[bi];
       if(!bloco.clientes.length){bi++;continue;}
       const dia=planoSexta[dPtr];
-      const take=Math.min(bloco.clientes.length,MAX-dia.clientes.length);
-      dia.clientes.push(...bloco.clientes.splice(0,take));
-      if(!bloco.clientes.length) bi++;
-      if(dia.clientes.length>=MAX) dPtr++;
+      const daysNeeded=Math.ceil(bloco.clientes.length/MAX);
+      const freshLeft=planoSexta.slice(dPtr).filter(d=>!d.clientes.length).length;
+
+      if(dia.clientes.length===0&&daysNeeded>=2&&freshLeft>=2){
+        // Bloco grande arranca em dia vazio: fatia por latitude
+        const nDias=Math.min(daysNeeded,planoSexta.length-dPtr);
+        const sorted=[...bloco.clientes].sort((a,b)=>+a.latitude-+b.latitude);
+        const chunkSize=Math.ceil(sorted.length/nDias);
+        for(let ki=0;ki<nDias;ki++){
+          if(dPtr>=planoSexta.length) break;
+          const chunk=sorted.slice(ki*chunkSize,(ki+1)*chunkSize);
+          if(chunk.length) planoSexta[dPtr++].clientes.push(...nnOrdem(chunk,homeLat,homeLon).slice(0,MAX));
+        }
+        bloco.clientes=[];bi++;
+      } else {
+        // Empacotamento original: encaixa no dia atual e avança quando cheio
+        const take=Math.min(bloco.clientes.length,MAX-dia.clientes.length);
+        dia.clientes.push(...bloco.clientes.splice(0,take));
+        if(!bloco.clientes.length) bi++;
+        if(dia.clientes.length>=MAX) dPtr++;
+      }
     }
     window._c1dPtrSexta=dPtr;
   }
