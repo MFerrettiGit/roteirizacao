@@ -662,8 +662,8 @@ function gerarRoteiro(){
         const ab=_avgBear(grupos[i]);
         let nearest=-1,nearDist=Infinity;
         grupos.forEach((g,gi)=>{if(gi===i)return;const d=_angDiff2(ab,_avgBear(g));if(d<nearDist){nearDist=d;nearest=gi;}});
-        // Não mescla com grupo em direção oposta (>90°): prefere dia com poucos clientes a zigzague
-        if(nearest>=0&&nearDist<=90){grupos[nearest].push(...grupos[i]);grupos[nearest].sort((a,z)=>z.distHome-a.distHome);grupos.splice(i,1);}
+        // Não mescla grupos >45° de diferença: corredor adjacente OK, direção diferente não
+        if(nearest>=0&&nearDist<=45){grupos[nearest].push(...grupos[i]);grupos[nearest].sort((a,z)=>z.distHome-a.distHome);grupos.splice(i,1);}
       }
     }
 
