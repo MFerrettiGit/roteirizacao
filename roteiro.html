@@ -859,67 +859,72 @@ function gerarRoteiro(forceAll=false){
     return((+c.fat_12m||0)/12)*0.5+(+c.mix_produtos||0)*20+(diasSemPedido(c)||0)*0.3;
   }
 
-  // 9a. Revisitas REMOTAS → corridor-aware: prioriza cidades na mesma direção do dia
-  if(dPtrC1<planoOutros.length){
-    // C2 blocos: clientes originais (todos), ordem dos grupos C1
-    const _munOrdem=(window._grupos||[]).flatMap(g=>g.map(b=>b.mun));
-    const c2Blocos=_munOrdem
-      .map(mun=>blocos.find(b=>b.mun===mun))
-      .filter(Boolean)
-      .map(b=>({...b,clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}));
-    const c2Orig=c2Blocos.map(b=>({...b,clientes:[...b.clientes]}));
+  // 9a. Revisitas REMOTAS → usa o MESMO otimizador de corredor do C1 (coerência total).
+  //     (1) Dias C1 abaixo de MAX: completa só com revisita da MESMA cidade já no dia.
+  //     (2) Dias sem C1: gera corredores de revisita com otimizarWedges, reciclando o
+  //         pool remoto — assim NENHUM dia mistura corredores diferentes.
+  {
+    const remBase=blocos.filter(b=>!b.isLocal);
 
-    // Bearing médio dos clientes já no dia
-    function diaBearing(dia){
-      const vis=dia.clientes.filter(c=>c.latitude&&c.longitude);
-      if(!vis.length) return -1;
-      return vis.reduce((s,c)=>s+bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude),0)/vis.length;
-    }
-    function angDiff(a,b){const d=Math.abs(a-b);return d>180?360-d:d;}
-
-    let c2Idx=0;
-    for(let di=0;di<planoOutros.length;di++){
+    // (1) Top-up dos dias C1 (<MAX) só com revisita da MESMA cidade presente no dia
+    for(let di=0;di<dPtrC1;di++){
       const dia=planoOutros[di];
       if(dia.clientes.length>=MAX) continue;
-
-      const dBear=diaBearing(dia);
-
-      // 1. Prioridade: mesma cidade (revisita — exclui duplicatas de referência)
-      const _jaIds=new Set(dia.clientes.map(c=>c.cod_cliente+'_'+c.loja));
-      const munsJaDia=new Set(dia.clientes.map(c=>c._mun||c.municipio));
-      if(munsJaDia.size>0){
-        for(let bi2=0;bi2<c2Blocos.length&&dia.clientes.length<MIN;bi2++){
-          if(!munsJaDia.has(c2Blocos[bi2].mun)) continue;
-          c2Blocos[bi2].clientes=c2Blocos[bi2].clientes.filter(c=>!_jaIds.has(c.cod_cliente+'_'+c.loja));
-          const n=Math.min(c2Blocos[bi2].clientes.length,MIN-dia.clientes.length);
-          if(n>0) dia.clientes.push(...c2Blocos[bi2].clientes.splice(0,n));
-        }
-        if(dia.clientes.length>=MIN) continue;
+      const jaIds=new Set(dia.clientes.map(c=>c.cod_cliente+'_'+c.loja));
+      const muns=new Set(dia.clientes.map(c=>c.municipio));
+      const cand=[];
+      remBase.forEach(b=>{if(muns.has(b.mun))b.clientes.forEach(c=>{if(!jaIds.has(c.cod_cliente+'_'+c.loja))cand.push(c);});});
+      cand.sort((a,z)=>scoreC(z)-scoreC(a));
+      let k=0;
+      while(dia.clientes.length<MAX&&k<cand.length){
+        const c=cand[k++],id=c.cod_cliente+'_'+c.loja;
+        if(jaIds.has(id))continue;
+        dia.clientes.push(c);jaIds.add(id);
       }
+    }
 
-      // 2. Mesma direção (≤30° de diferença de bearing)
-      if(dBear>=0){
-        c2Blocos.forEach((b,i)=>{
-          if(dia.clientes.length>=MIN) return;
-          if(angDiff(b.bear,dBear)>30) return;
-          const n=Math.min(b.clientes.length,MIN-dia.clientes.length);
-          if(n>0) dia.clientes.push(...c2Blocos[i].clientes.splice(0,n));
+    // (2) Dias puramente C2: gera corredores de revisita reciclando o pool remoto
+    let di=dPtrC1,guard=0;
+    while(di<planoOutros.length&&guard++<60){
+      const restantes=planoOutros.length-di;
+      const blocosC2=remBase.map(b=>({mun:b.mun,lat:b.lat,lon:b.lon,bear:b.bear,distHome:b.distHome,
+        clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}));
+      const diasC2=otimizarWedges(blocosC2,restantes,MAX,MIN,homeLat,homeLon);
+      if(!diasC2.length) break;
+      for(const d of diasC2){
+        if(di>=planoOutros.length) break;
+        planoOutros[di].clientes.push(...d.clientes);
+        di++;
+      }
+    }
+
+    // (3) Dias remotos ainda abaixo de MIN → completa com revisita no CAMINHO DE VOLTA
+    //     (cliente mais próximo do último do dia, no sentido de casa) — mantém corredor.
+    const remCli=remBase.flatMap(b=>b.clientes);
+    const _angDif2=(a,b)=>{const d=Math.abs(a-b);return d>180?360-d:d;};
+    for(let di2=0;di2<planoOutros.length;di2++){
+      const dia=planoOutros[di2];
+      if(!dia.clientes.length) continue;
+      while(dia.clientes.length>0&&dia.clientes.length<MIN){
+        const jaIds=new Set(dia.clientes.map(c=>c.cod_cliente+'_'+c.loja));
+        // rumo médio do dia (corredor) e último cliente (mais perto de casa) p/ o retorno
+        const bs=dia.clientes.filter(c=>+c.latitude&&+c.longitude).map(c=>bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude));
+        const diaBear=bs.length?bs.reduce((s,b)=>s+b,0)/bs.length:-1;
+        let ult=null,ultDH=Infinity;
+        dia.clientes.forEach(c=>{const dh=haversine(homeLat,homeLon,+c.latitude,+c.longitude);if(dh<ultDH){ultDH=dh;ult=c;}});
+        // candidato: MESMO corredor (rumo ≤25°), mais próximo do último no sentido de casa
+        let best=null,bestD=Infinity,bestCorr=null,bestCorrD=Infinity;
+        remCli.forEach(c=>{
+          if(jaIds.has(c.cod_cliente+'_'+c.loja))return;
+          const cb=bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude);
+          const dUC=haversine(+ult.latitude,+ult.longitude,+c.latitude,+c.longitude);
+          const dCH=haversine(homeLat,homeLon,+c.latitude,+c.longitude);
+          if(dCH<ultDH&&dUC<bestD){bestD=dUC;best=c;}                 // qualquer no sentido de casa
+          if(diaBear>=0&&_angDif2(cb,diaBear)<=25&&dUC<bestCorrD){bestCorrD=dUC;bestCorr=c;} // mesmo corredor
         });
-        if(dia.clientes.length>=MIN) continue;
-      }
-
-      // 3. Fallback: qualquer cidade até MAX (ordem da fila)
-      while(dia.clientes.length<MAX){
-        if(c2Idx>=c2Blocos.length){
-          c2Blocos.forEach((b,i)=>{c2Blocos[i].clientes=[...c2Orig[i].clientes];});
-          c2Idx=0;
-        }
-        const b=c2Blocos[c2Idx];
-        if(!b.clientes.length){c2Idx++;continue;}
-        const n=Math.min(b.clientes.length,MAX-dia.clientes.length);
-        dia.clientes.push(...b.clientes.splice(0,n));
-        if(!b.clientes.length) c2Idx++;
-        if(dia.clientes.length>=MIN) break;
+        const escolhido=bestCorr||best;
+        if(!escolhido)break;
+        dia.clientes.push(escolhido);
       }
     }
   }
