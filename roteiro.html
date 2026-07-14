@@ -763,197 +763,84 @@ function gerarRoteiro(forceAll=false){
     });
   }
 
-  // ── 8a. C1 REMOTO → dias NÃO-sexta (varredura angular greedy) ──
-  // Âncora na cidade mais distante restante → agrupa tudo dentro de 50° dessa direção.
-  // Cada grupo preenche dias consecutivos. Ao esgotar o grupo, fecha o dia se ≥ MIN.
+  // ══════════════════════════════════════════════════════════════
+  // MOTOR v2 — AGRUPAMENTO GEOGRÁFICO + REPETIÇÃO DE CICLOS
+  //  • Bloco de dia = mancha compacta por PROXIMIDADE real (não ângulo).
+  //  • Semente = cliente mais distante de casa; cresce pegando os vizinhos
+  //    mais próximos do centróide até TARGET. Assim as áreas distantes viram
+  //    dias CHEIOS (nunca "viagem longa p/ poucos clientes"); a sobra pequena
+  //    fica perto de casa (viagem curta). Nenhum dia mistura regiões.
+  //  • Revisitas (ciclo 2,3…) = REPETIÇÃO dos mesmos blocos → coerência sempre.
+  // ══════════════════════════════════════════════════════════════
   const planoOutros=plano.filter(p=>!p.isSexta);
-  const usadosFill=new Set(); // clientes locais usados para completar dias remotos curtos
-  {
-    // Blocos remotos com C1 pendentes (clientes ordenados por NN interno)
-    const remBlocos=blocos
-      .filter(b=>!b.isLocal)
-      .map(b=>({mun:b.mun,lat:b.lat,lon:b.lon,bear:b.bear,distHome:b.distHome,
-                clientes:nnOrdem(b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja)),b.lat,b.lon)}))
-      .filter(b=>b.clientes.length>0);
-
-    // MOTOR: parte os blocos em dias-fatia otimizados por nota
-    const dias=otimizarWedges(remBlocos,planoOutros.length,MAX,MIN,homeLat,homeLon);
-
-    let dPtr=0;
-    const grupos=[];
-    dias.forEach(d=>{
-      if(dPtr>=planoOutros.length) return;
-      planoOutros[dPtr].clientes.push(...d.clientes);
-      grupos.push(d.blocos); // cada "grupo" = as cidades de um dia (ordem C2)
-      dPtr++;
-    });
-
-    // ── Completa dias curtos (<MIN) com o cliente que fica NO CAMINHO DE VOLTA ──
-    // Quando um corredor rende um dia abaixo de MIN (ex.: Miguelópolis sozinha após
-    // separar de Ituverava), encaixa o cliente que menos desvia a perna final da
-    // rota (último cliente → casa): menor desvio = mais perto do fim indo pra casa.
-    {
-      const jaRem=new Set();
-      planoOutros.forEach(d=>d.clientes.forEach(c=>jaRem.add(c.cod_cliente+'_'+c.loja)));
-      const disponiveis=pool.filter(c=>{const id=c.cod_cliente+'_'+c.loja;return !jaRem.has(id)&&!jaVisitados.has(id);});
-      const usado=new Set();
-      for(let di=0;di<dPtr;di++){
-        const dia=planoOutros[di];
-        while(dia.clientes.length>0&&dia.clientes.length<MIN){
-          // último cliente no sentido da volta = o do dia mais perto de casa
-          let ult=null,ultDH=Infinity;
-          dia.clientes.forEach(c=>{const dh=haversine(homeLat,homeLon,+c.latitude,+c.longitude);if(dh<ultDH){ultDH=dh;ult=c;}});
-          const dUH=haversine(homeLat,homeLon,+ult.latitude,+ult.longitude);
-          // candidato MAIS PRÓXIMO do último cliente, no sentido da volta (mais perto
-          // de casa que o último). Mantém o dia compacto em vez de saltar pra casa.
-          let best=null,bestD=Infinity,bestAny=null,bestAnyD=Infinity;
-          disponiveis.forEach(c=>{
-            const id=c.cod_cliente+'_'+c.loja;if(usado.has(id))return;
-            const dUC=haversine(+ult.latitude,+ult.longitude,+c.latitude,+c.longitude);
-            const dCH=haversine(homeLat,homeLon,+c.latitude,+c.longitude);
-            if(dUC<bestAnyD){bestAnyD=dUC;bestAny=c;}
-            if(dCH<dUH&&dUC<bestD){bestD=dUC;best=c;} // na direção de casa
-          });
-          best=best||bestAny; // se nenhum estiver no sentido da volta, pega o mais próximo do último
-          if(!best) break;
-          dia.clientes.push(best);
-          usado.add(best.cod_cliente+'_'+best.loja);
-          usadosFill.add(best.cod_cliente+'_'+best.loja);
-        }
-      }
-    }
-
-    window._grupos=grupos;
-    window._c1dPtr=dPtr;
-  }
-
-  // ── 8b. C1 LOCAL → dias SEXTA ────────────────────────────────
   const planoSexta=plano.filter(p=>p.isSexta);
-  {
-    const filaLocalC1=blocos
-      .filter(b=>b.isLocal)
-      .map(b=>{
-        const c1s=b.clientes.filter(c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja));
-        return c1s.length?{...b,clientes:c1s}:null;
-      })
-      .filter(Boolean)
-      .sort((a,z)=>z.distHome-a.distHome);
+  const TARGET=Math.min(MAX,7); // meta de clientes por dia
 
-    // MOTOR: mesmo otimizador dos remotos. Como as cidades locais são
-    // próximas de casa, o critério dominante vira a compactação/equilíbrio.
-    const remLocal=filaLocalC1.map(b=>({mun:b.mun,lat:b.lat,lon:b.lon,bear:b.bear,distHome:b.distHome,clientes:[...b.clientes]}));
-    const diasL=otimizarWedges(remLocal,planoSexta.length,MAX,MIN,homeLat,homeLon);
-    let dPtr=0;
-    diasL.forEach(d=>{
-      if(dPtr>=planoSexta.length) return;
-      planoSexta[dPtr].clientes.push(...d.clientes);
-      dPtr++;
+  const _cent=cls=>[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,
+                    cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];
+
+  // Agrupa clientes em blocos-dia compactos por FUSÃO AGLOMERATIVA de cidades:
+  // cada cidade começa como um grupo; funde-se o par de grupos mais próximos
+  // enquanto couber (≤MAX) e estiver perto (≤MERGE_KM). Cidades sem vizinho
+  // próximo ficam sozinhas (dia curto) em vez de serem esticadas para longe.
+  const DIAM_LIMIT=35; // um dia inteiro tem que caber num raio de ~35 km (não estica)
+  // Diâmetro (maior distância entre 2 clientes) de uma lista
+  function _diam(cls){
+    let m=0;
+    for(let i=0;i<cls.length;i++)for(let j=i+1;j<cls.length;j++){
+      const d=haversine(+cls[i].latitude,+cls[i].longitude,+cls[j].latitude,+cls[j].longitude);
+      if(d>m)m=d;
+    }
+    return m;
+  }
+  function agruparCompacto(clientes){
+    const byM={};
+    clientes.forEach(c=>{if(+c.latitude&&+c.longitude){(byM[c.municipio]=byM[c.municipio]||[]).push(c);}});
+    // 1) Quebra cidades grandes (>MAX) em pedaços ANTES de fundir
+    let grupos=[];
+    Object.values(byM).forEach(cls=>{
+      if(cls.length<=MAX){grupos.push(cls);return;}
+      const ce=_cent(cls),ord=nnOrdem(cls,ce[0],ce[1]);
+      const nParts=Math.ceil(ord.length/MAX),sz=Math.ceil(ord.length/nParts);
+      for(let i=0;i<ord.length;i+=sz) grupos.push(ord.slice(i,i+sz));
     });
-    window._c1dPtrSexta=dPtr;
-  }
-  const dPtrC1=window._c1dPtr||0;
-  const dPtrC1Sexta=window._c1dPtrSexta||0;
-
-  // ── 9. CICLO 2: revisitas ─────────────────────────────────────
-  function scoreC(c){
-    return((+c.fat_12m||0)/12)*0.5+(+c.mix_produtos||0)*20+(diasSemPedido(c)||0)*0.3;
-  }
-
-  // 9a. Revisitas REMOTAS → usa o MESMO otimizador de corredor do C1 (coerência total).
-  //     (1) Dias C1 abaixo de MAX: completa só com revisita da MESMA cidade já no dia.
-  //     (2) Dias sem C1: gera corredores de revisita com otimizarWedges, reciclando o
-  //         pool remoto — assim NENHUM dia mistura corredores diferentes.
-  {
-    const remBase=blocos.filter(b=>!b.isLocal);
-
-    // (1) Top-up dos dias C1 (<MAX) só com revisita da MESMA cidade presente no dia
-    for(let di=0;di<dPtrC1;di++){
-      const dia=planoOutros[di];
-      if(dia.clientes.length>=MAX) continue;
-      const jaIds=new Set(dia.clientes.map(c=>c.cod_cliente+'_'+c.loja));
-      const muns=new Set(dia.clientes.map(c=>c.municipio));
-      const cand=[];
-      remBase.forEach(b=>{if(muns.has(b.mun))b.clientes.forEach(c=>{if(!jaIds.has(c.cod_cliente+'_'+c.loja))cand.push(c);});});
-      cand.sort((a,z)=>scoreC(z)-scoreC(a));
-      let k=0;
-      while(dia.clientes.length<MAX&&k<cand.length){
-        const c=cand[k++],id=c.cod_cliente+'_'+c.loja;
-        if(jaIds.has(id))continue;
-        dia.clientes.push(c);jaIds.add(id);
+    // 2) Fusão aglomerativa por DIÂMETRO resultante (complete-linkage com corte)
+    while(true){
+      let bi=-1,bj=-1,bd=Infinity;
+      for(let i=0;i<grupos.length;i++)for(let j=i+1;j<grupos.length;j++){
+        if(grupos[i].length+grupos[j].length>MAX) continue;
+        const dd=_diam(grupos[i].concat(grupos[j]));
+        if(dd<bd){bd=dd;bi=i;bj=j;}
       }
+      if(bi<0||bd>DIAM_LIMIT) break;
+      grupos[bi]=grupos[bi].concat(grupos[bj]);
+      grupos.splice(bj,1);
     }
-
-    // (2) Dias puramente C2: gera corredores de revisita reciclando o pool remoto
-    let di=dPtrC1,guard=0;
-    while(di<planoOutros.length&&guard++<60){
-      const restantes=planoOutros.length-di;
-      const blocosC2=remBase.map(b=>({mun:b.mun,lat:b.lat,lon:b.lon,bear:b.bear,distHome:b.distHome,
-        clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}));
-      const diasC2=otimizarWedges(blocosC2,restantes,MAX,MIN,homeLat,homeLon);
-      if(!diasC2.length) break;
-      for(const d of diasC2){
-        if(di>=planoOutros.length) break;
-        planoOutros[di].clientes.push(...d.clientes);
-        di++;
-      }
-    }
-
-    // (3) Dias remotos ainda abaixo de MIN → completa com revisita no CAMINHO DE VOLTA
-    //     (cliente mais próximo do último do dia, no sentido de casa) — mantém corredor.
-    const remCli=remBase.flatMap(b=>b.clientes);
-    const _angDif2=(a,b)=>{const d=Math.abs(a-b);return d>180?360-d:d;};
-    for(let di2=0;di2<planoOutros.length;di2++){
-      const dia=planoOutros[di2];
-      if(!dia.clientes.length) continue;
-      while(dia.clientes.length>0&&dia.clientes.length<MIN){
-        const jaIds=new Set(dia.clientes.map(c=>c.cod_cliente+'_'+c.loja));
-        // rumo médio do dia (corredor) e último cliente (mais perto de casa) p/ o retorno
-        const bs=dia.clientes.filter(c=>+c.latitude&&+c.longitude).map(c=>bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude));
-        const diaBear=bs.length?bs.reduce((s,b)=>s+b,0)/bs.length:-1;
-        let ult=null,ultDH=Infinity;
-        dia.clientes.forEach(c=>{const dh=haversine(homeLat,homeLon,+c.latitude,+c.longitude);if(dh<ultDH){ultDH=dh;ult=c;}});
-        // candidato: MESMO corredor (rumo ≤25°), mais próximo do último no sentido de casa
-        let best=null,bestD=Infinity,bestCorr=null,bestCorrD=Infinity;
-        remCli.forEach(c=>{
-          if(jaIds.has(c.cod_cliente+'_'+c.loja))return;
-          const cb=bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude);
-          const dUC=haversine(+ult.latitude,+ult.longitude,+c.latitude,+c.longitude);
-          const dCH=haversine(homeLat,homeLon,+c.latitude,+c.longitude);
-          if(dCH<ultDH&&dUC<bestD){bestD=dUC;best=c;}                 // qualquer no sentido de casa
-          if(diaBear>=0&&_angDif2(cb,diaBear)<=25&&dUC<bestCorrD){bestCorrD=dUC;bestCorr=c;} // mesmo corredor
-        });
-        const escolhido=bestCorr||best;
-        if(!escolhido)break;
-        dia.clientes.push(escolhido);
-      }
-    }
+    return grupos;
   }
 
-  // 9b. Revisitas LOCAIS → sextas
-  if(dPtrC1Sexta<planoSexta.length){
-    const filaC2L=blocos
-      .filter(b=>b.isLocal)
-      .map(b=>({...b,clientes:[...b.clientes].sort((a,z)=>scoreC(z)-scoreC(a))}))
-      .sort((a,z)=>z.distHome-a.distHome);
-    const filaC2Lorig=filaC2L.map(b=>({...b,clientes:[...b.clientes]}));
-    let c2Idx=0;
-    for(let di=dPtrC1Sexta;di<planoSexta.length;di++){
-      const dia=planoSexta[di];
-      if(dia.clientes.length>=MAX) continue;
-      while(dia.clientes.length<MAX){
-        if(c2Idx>=filaC2L.length){
-          filaC2L.forEach((b,i)=>{filaC2L[i].clientes=[...filaC2Lorig[i].clientes];});
-          c2Idx=0;
-        }
-        const b=filaC2L[c2Idx];
-        if(!b.clientes.length){c2Idx++;continue;}
-        const n=Math.min(b.clientes.length,MAX-dia.clientes.length);
-        dia.clientes.push(...b.clientes.splice(0,n));
-        if(!b.clientes.length) c2Idx++;
-        if(dia.clientes.length>=MIN) break;
-      }
-    }
+  // C1 = clientes ainda não visitados (no forceAll = todos)
+  const _naoVis=c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja);
+  const remotos=blocos.filter(b=>!b.isLocal).flatMap(b=>b.clientes).filter(_naoVis);
+  const locais =blocos.filter(b=> b.isLocal).flatMap(b=>b.clientes).filter(_naoVis);
+
+  // Blocos-dia ordenados do mais distante ao mais perto de casa
+  const _distC=cls=>haversine(homeLat,homeLon,_cent(cls)[0],_cent(cls)[1]);
+  const blocosRemotos=agruparCompacto(remotos).sort((a,z)=>_distC(z)-_distC(a));
+  const blocosLocais =agruparCompacto(locais ).sort((a,z)=>_distC(z)-_distC(a));
+
+  // Preenche os dias em ciclo: ciclo 1 = cada bloco 1x; depois repete (revisitas)
+  function preencherDias(dias,blks){
+    if(!blks.length) return;
+    dias.forEach((dia,i)=>{ dia.clientes.push(...blks[i%blks.length]); });
   }
+  preencherDias(planoOutros,blocosRemotos);
+  preencherDias(planoSexta ,blocosLocais);
+  window._blocosDia={remotos:blocosRemotos.length,locais:blocosLocais.length,
+    diasRemotos:planoOutros.length,diasLocais:planoSexta.length};
+
+  // ── 9. Revisitas: já resolvidas pela repetição de blocos no MOTOR v2 acima
+  //     (cada dia excedente reusa um bloco-dia inteiro → corredor coerente).
 
   // ── 10. Constrói slots com horários ──────────────────────────
   let prosContador=0;
