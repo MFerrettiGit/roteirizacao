@@ -655,7 +655,96 @@ function gerarRoteiro(forceAll=false){
   //
   //    Enquanto vazio, o site roda normalmente e mostra os dias SEM visitas.
   // ══════════════════════════════════════════════════════════════
-  // >>> nova lógica aqui <<<
+  // ── 8. MOTOR v3 — GRUPOS ANGULARES a partir da casa do vendedor ──
+  // Regras absolutas: grupo = fatia angular saindo de casa; 1 grupo por dia;
+  // 5–8 clientes/dia; grupo pequeno/sobra é completado pelo GRUPO DA CASA (raio).
+  const HOME_RADIUS=12; // km — raio do grupo da casa (≈ dist. casa→Restinga); padrão p/ todos
+  const GAP_GRAUS=40;   // vão angular CLARO que separa dois grupos "de primeira"
+  const SPAN_MAX=85;    // se um grupo abrir mais que isto em ângulo (sem vão), corta pela LINHA CENTRAL
+  const _idc=c=>c.cod_cliente+'_'+c.loja;
+  const _distH=c=>haversine(homeLat,homeLon,+c.latitude,+c.longitude);
+
+  const todosCli=pool.filter(c=>+c.latitude&&+c.longitude);
+  const grupoCasa=todosCli.filter(c=>_distH(c)<=HOME_RADIUS);
+  const remotos  =todosCli.filter(c=>_distH(c)> HOME_RADIUS);
+
+  // 1) Grupos angulares. (1a) quebra onde há VÃO CLARO; (1b) onde o leque é
+  //    contínuo e abre demais (span>SPAN_MAX), traça a LINHA CENTRAL (mediana)
+  //    e divide em dois — recursivamente, equilibrando por quantidade.
+  const cb=remotos.map(c=>({c,b:bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude)}))
+                  .sort((a,z)=>a.b-z.b);
+  const gruposAng=[];
+  if(cb.length){
+    let maxGap=-1,cut=0;
+    for(let i=0;i<cb.length;i++){
+      const j=(i+1)%cb.length;
+      let gap=cb[j].b-cb[i].b; if(gap<=0)gap+=360;
+      if(gap>maxGap){maxGap=gap;cut=j;}
+    }
+    const seq=cb.slice(cut).concat(cb.slice(0,cut)); // sem "wrap" dentro da sequência
+    // 1a) grupos base por vão claro
+    const base=[];let atual=[seq[0]];
+    for(let i=1;i<seq.length;i++){
+      let gap=seq[i].b-seq[i-1].b; if(gap<0)gap+=360;
+      if(gap>GAP_GRAUS){base.push(atual);atual=[];}
+      atual.push(seq[i]);
+    }
+    if(atual.length)base.push(atual);
+    // 1b) bisecção pela linha central enquanto o span > SPAN_MAX e der p/ 2 grupos viáveis
+    const fila=[...base];
+    while(fila.length){
+      const g=fila.shift();                       // g = [{c,b}…] em ordem de rumo
+      const span=g.length?g[g.length-1].b-g[0].b:0;
+      if(span>SPAN_MAX && g.length>=2*MIN){
+        const mid=Math.floor(g.length/2);         // linha central = mediana por quantidade
+        fila.unshift(g.slice(0,mid),g.slice(mid));
+      }else{
+        gruposAng.push(g.map(x=>x.c));
+      }
+    }
+  }
+
+  // 2) Divide um grupo em dias de MIN..MAX; sobra <MIN é completada com o grupo da casa
+  const casaPool=[...grupoCasa];
+  let casaPtr=0;
+  const puxarCasa=n=>{const r=[];for(let k=0;k<n&&casaPool.length;k++){r.push(casaPool[casaPtr++%casaPool.length]);}return r;};
+  const conflitos=[];
+  function diasDoGrupo(clientes,nome,ehCasa){
+    const dias=[];
+    if(!clientes.length) return dias;
+    const parts=Math.max(1,Math.ceil(clientes.length/MAX));
+    const sz=Math.ceil(clientes.length/parts);
+    for(let i=0;i<clientes.length;i+=sz){
+      let bloco=clientes.slice(i,i+sz);
+      if(bloco.length<MIN&&!ehCasa){
+        const fill=puxarCasa(MIN-bloco.length);
+        const distMedia=bloco.reduce((s,c)=>s+_distH(c),0)/bloco.length;
+        if(fill.length&&distMedia>HOME_RADIUS+8)
+          conflitos.push({grupo:nome,distKm:Math.round(distMedia),completados:fill.length,cidades:[...new Set(bloco.map(c=>c.municipio))].join('+')});
+        bloco=bloco.concat(fill);
+      }
+      dias.push(bloco);
+    }
+    return dias;
+  }
+
+  // 3) Blocos-dia: grupos angulares + grupo da casa (que também tem dias próprios)
+  const blocosDia=[];
+  const _cenB=cls=>[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];
+  gruposAng.forEach((g,i)=>{diasDoGrupo(g,'G'+(i+1),false).forEach(d=>blocosDia.push(d));});
+  diasDoGrupo(grupoCasa,'CASA',true).forEach(d=>blocosDia.push(d));
+
+  // 4) Distribui nos dias do mês (cicla até preencher todos os dias / ≥100 visitas)
+  if(blocosDia.length) plano.forEach((dia,i)=>{dia.clientes.push(...blocosDia[i%blocosDia.length]);});
+
+  // Diagnóstico para validação (não afeta o roteiro)
+  window._motorV3={
+    homeRadius:HOME_RADIUS,gapGraus:GAP_GRAUS,
+    grupoCasa:grupoCasa.length,remotos:remotos.length,
+    grupos:gruposAng.map((g,i)=>({g:'G'+(i+1),n:g.length,cidades:[...new Set(g.map(c=>c.municipio))].join('+'),
+      rumo:Math.round(bearingDeg(homeLat,homeLon,..._cenB(g)))})),
+    blocosDia:blocosDia.length,conflitos
+  };
 
   // ── 10. Constrói slots com horários ──────────────────────────
   let prosContador=0;
