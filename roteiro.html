@@ -429,11 +429,10 @@ async function init(){
   const tema=localStorage.getItem('ferretti_tema')||'light';
   document.documentElement.setAttribute('data-theme',tema);
   document.getElementById('btnTema').textContent=tema==='dark'?'☀️ Claro':'🌙 Escuro';
+  // Ao carregar, apenas MOSTRA a última rota salva — NÃO regenera.
+  // A roteirização só roda quando o usuário digita a senha ("Fazer Roteirização").
   carregarEstado();
-  // Sem histórico real de visitas: regenera SEMPRE do zero ao carregar, para que
-  // o site reflita a lógica atual do motor (senão dias passados salvos por versões
-  // antigas do código ficam congelados e exibem rotas que já não valem).
-  gerarRoteiro(true);
+  renderTudo();
   selecionarDia(new Date());
 }
 
