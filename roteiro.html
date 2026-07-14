@@ -604,38 +604,12 @@ function gerarRoteiro(forceAll=false){
   const homeLat=_hv?_hv.lat:pool.reduce((s,c)=>s+(+c.latitude),0)/pool.length;
   const homeLon=_hv?_hv.lon:pool.reduce((s,c)=>s+(+c.longitude),0)/pool.length;
 
-  // ── 5. Blocos por cidade (com bearing + corredor angular + flag local) ──
+  // ── 5. Helpers geométricos (genéricos, à disposição da nova lógica) ──
   function bearingDeg(lat1,lon1,lat2,lon2){
     const dLon=(lon2-lon1)*Math.PI/180,r1=lat1*Math.PI/180,r2=lat2*Math.PI/180;
     return(Math.atan2(Math.sin(dLon)*Math.cos(r2),
       Math.cos(r1)*Math.sin(r2)-Math.sin(r1)*Math.cos(r2)*Math.cos(dLon))*180/Math.PI+360)%360;
   }
-  const FRIDAY_RADIUS=18; // km — apenas Franca e arredores imediatos ficam para sextas
-  const blocos=Object.entries(porMun).map(([mun,cls])=>{
-    const lat=cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length;
-    const lon=cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length;
-    const distHome=haversine(homeLat,homeLon,lat,lon);
-    const bear=bearingDeg(homeLat,homeLon,lat,lon);
-    // 8 corredores de 45° (0=N,1=NE,2=E,3=SE,4=S,5=SO,6=O,7=NO)
-    const corredor=Math.floor(((bear+22.5)%360)/45);
-    return{mun,clientes:[...cls],lat,lon,distHome,bear,corredor,isLocal:distHome<=FRIDAY_RADIUS};
-  });
-  const tamMun={};
-  blocos.forEach(b=>tamMun[b.mun]=b.clientes.length);
-
-  // Agrupa blocos REMOTOS em corredores angulares → ordena corredores por distância média DESC
-  const _corMap={};
-  blocos.filter(b=>!b.isLocal).forEach(b=>{
-    if(!_corMap[b.corredor]) _corMap[b.corredor]=[];
-    _corMap[b.corredor].push(b);
-  });
-  const corredores=Object.values(_corMap)
-    .map(bs=>{
-      bs.sort((a,z)=>z.distHome-a.distHome); // dentro do corredor: longe→perto
-      return{bs,avgDist:bs.reduce((s,b)=>s+b.distHome,0)/bs.length};
-    })
-    .sort((a,z)=>z.avgDist-a.avgDist); // corredor mais distante primeiro
-
   const MIN=CFG.minPorDia, MAX=CFG.maxPorDia;
 
   // ── 6. Dias a gerar ───────────────────────────────────────────
@@ -664,183 +638,24 @@ function gerarRoteiro(forceAll=false){
   }
 
   // ══════════════════════════════════════════════════════════════
-  // MOTOR DE DECISÃO — gera candidatos, dá nota, escolhe o melhor.
-  // Cada DIA = uma fatia angular (wedge) saindo de Franca. Testar
-  // muitos cortes e ficar com o de menor nota elimina o zigue-zague
-  // por construção e mantém cidades do mesmo corredor juntas.
+  // 8. LÓGICA DE ROTEIRIZAÇÃO — ZERADA EM 2026-07-14 (a pedido).
+  //    Toda a lógica anterior (varredura angular / agrupamento / ciclos)
+  //    foi removida. A NOVA LÓGICA que o usuário vai desenhar entra AQUI:
+  //    seu objetivo é preencher `dia.clientes` (array de objetos-cliente)
+  //    para cada `dia` de `plano`.
+  //
+  //    Disponível neste ponto:
+  //      • plano       → [{data:'YYYY-MM-DD', clientes:[], isSexta, simulado}]
+  //      • pool        → todos os clientes do vendedor (objetos com latitude,
+  //                       longitude, municipio, cod_cliente, loja, fat_12m, …)
+  //      • porMun      → { municipio: [clientes…] }
+  //      • homeLat/homeLon → casa do vendedor
+  //      • jaVisitados → Set de ids já visitados (histórico); MIN, MAX (CFG)
+  //      • helpers: haversine(la1,lo1,la2,lo2), bearingDeg(...), nnOrdem(...)
+  //
+  //    Enquanto vazio, o site roda normalmente e mostra os dias SEM visitas.
   // ══════════════════════════════════════════════════════════════
-  const W_ZZ=2.0;   // km-equivalente por grau de abertura angular do dia (pune zigue-zague)
-  const W_BAL=3.0;  // km-equivalente por cliente de desequilíbrio entre dias
-
-  // Menor arco (em graus) que cobre todos os rumos de um dia
-  function _spanAngular(bears){
-    if(bears.length<=1) return 0;
-    const s=[...bears].sort((a,b)=>a-b);
-    let maxGap=(360-s[s.length-1])+s[0];
-    for(let i=1;i<s.length;i++) maxGap=Math.max(maxGap,s[i]-s[i-1]);
-    return 360-maxGap;
-  }
-  // Ordena unidades (cidades) por vizinho-mais-próximo a partir de casa
-  function _nnUnidades(units,sLat,sLon){
-    let rem=[...units],res=[],cLat=sLat,cLon=sLon;
-    while(rem.length){
-      let best=rem[0],bd=Infinity;
-      rem.forEach(u=>{const d=haversine(cLat,cLon,u.lat,u.lon);if(d<bd){bd=d;best=u;}});
-      res.push(best);cLat=best.lat;cLon=best.lon;
-      rem=rem.filter(u=>u!==best);
-    }
-    return res;
-  }
-  // Comprimento da rota do dia: casa → cidades (NN) → casa
-  function _rotaLen(units,sLat,sLon){
-    const ord=_nnUnidades(units,sLat,sLon);
-    let d=0,cLat=sLat,cLon=sLon;
-    ord.forEach(u=>{d+=haversine(cLat,cLon,u.lat,u.lon);cLat=u.lat;cLon=u.lon;});
-    d+=haversine(cLat,cLon,sLat,sLon);
-    return d;
-  }
-  // Otimizador principal: recebe blocos-cidade e nº de dias disponíveis,
-  // devolve array de dias {blocos:[...], clientes:[...]} minimizando a nota.
-  function otimizarWedges(blcs,maxDias,MAX,MIN,hLat,hLon){
-    if(!blcs.length||maxDias<=0) return [];
-    // 1. Quebra cidades maiores que MAX em sub-unidades (mantém ordem NN interna)
-    const units=[];
-    blcs.forEach(b=>{
-      if(b.clientes.length<=MAX){units.push(b);}
-      else{for(let i=0;i<b.clientes.length;i+=MAX){units.push({...b,clientes:b.clientes.slice(i,i+MAX)});}}
-    });
-    // 2. Ordena por rumo (varredura angular)
-    const byBear=[...units].sort((a,z)=>a.bear-z.bear);
-    const n=byBear.length;
-    const totalCli=byBear.reduce((s,u)=>s+u.clientes.length,0);
-
-    // Diferença angular circular entre dois rumos
-    const _angDif=(a,b)=>{const d=Math.abs(a-b);return d>180?360-d:d;};
-    const CORREDOR_GAP=13; // graus: salto maior que isto = corredor diferente → fecha o dia
-    // Constrói uma partição a partir de um offset de rotação e uma meta de carga/dia.
-    // Fecha o dia por CORREDOR (salto de rumo) e por TETO (capacidade).
-    function build(offset,target){
-      const seq=byBear.slice(offset).concat(byBear.slice(0,offset));
-      const dias=[];let cur=[],curN=0;
-      for(const u of seq){
-        const prev=cur.length?cur[cur.length-1]:null;
-        const saltoCorredor=prev&&_angDif(prev.bear,u.bear)>CORREDOR_GAP;
-        if(curN>0&&(saltoCorredor||curN+u.clientes.length>MAX)){dias.push(cur);cur=[];curN=0;}
-        cur.push(u);curN+=u.clientes.length;
-        if(curN>=target){dias.push(cur);cur=[];curN=0;}
-      }
-      if(cur.length) dias.push(cur);
-      return dias;
-    }
-    function nota(dias){
-      if(dias.length>maxDias) return Infinity;
-      const avg=totalCli/dias.length;
-      let travel=0,zz=0,bal=0;
-      dias.forEach(d=>{
-        zz+=_spanAngular(d.map(u=>u.bear));
-        travel+=_rotaLen(d,hLat,hLon);
-        const cnt=d.reduce((s,u)=>s+u.clientes.length,0);
-        bal+=Math.abs(cnt-avg);
-      });
-      return travel+zz*W_ZZ+bal*W_BAL;
-    }
-    // 3. Gera candidatos: cada offset de início × cada meta de carga em [MIN,MAX]
-    let best=null,bestSc=Infinity,nCand=0;
-    for(let off=0;off<n;off++){
-      for(let t=MIN;t<=MAX;t++){
-        const d=build(off,t);nCand++;
-        const sc=nota(d);
-        if(sc<bestSc){bestSc=sc;best=d;}
-      }
-    }
-    if(!best) best=build(0,MAX);
-    window._motorInfo={nCand,nota:Math.round(bestSc)};
-    // 4. Dentro de cada dia: ordena cidades por NN e concatena clientes
-    return best.map(d=>{
-      const ord=_nnUnidades(d,hLat,hLon);
-      const clientes=[];ord.forEach(u=>clientes.push(...u.clientes));
-      return{blocos:ord,clientes};
-    });
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // MOTOR v2 — AGRUPAMENTO GEOGRÁFICO + REPETIÇÃO DE CICLOS
-  //  • Bloco de dia = mancha compacta por PROXIMIDADE real (não ângulo).
-  //  • Semente = cliente mais distante de casa; cresce pegando os vizinhos
-  //    mais próximos do centróide até TARGET. Assim as áreas distantes viram
-  //    dias CHEIOS (nunca "viagem longa p/ poucos clientes"); a sobra pequena
-  //    fica perto de casa (viagem curta). Nenhum dia mistura regiões.
-  //  • Revisitas (ciclo 2,3…) = REPETIÇÃO dos mesmos blocos → coerência sempre.
-  // ══════════════════════════════════════════════════════════════
-  const planoOutros=plano.filter(p=>!p.isSexta);
-  const planoSexta=plano.filter(p=>p.isSexta);
-  const TARGET=Math.min(MAX,7); // meta de clientes por dia
-
-  const _cent=cls=>[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,
-                    cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];
-
-  // Agrupa clientes em blocos-dia compactos por FUSÃO AGLOMERATIVA de cidades:
-  // cada cidade começa como um grupo; funde-se o par de grupos mais próximos
-  // enquanto couber (≤MAX) e estiver perto (≤MERGE_KM). Cidades sem vizinho
-  // próximo ficam sozinhas (dia curto) em vez de serem esticadas para longe.
-  const DIAM_LIMIT=35; // um dia inteiro tem que caber num raio de ~35 km (não estica)
-  // Diâmetro (maior distância entre 2 clientes) de uma lista
-  function _diam(cls){
-    let m=0;
-    for(let i=0;i<cls.length;i++)for(let j=i+1;j<cls.length;j++){
-      const d=haversine(+cls[i].latitude,+cls[i].longitude,+cls[j].latitude,+cls[j].longitude);
-      if(d>m)m=d;
-    }
-    return m;
-  }
-  function agruparCompacto(clientes){
-    const byM={};
-    clientes.forEach(c=>{if(+c.latitude&&+c.longitude){(byM[c.municipio]=byM[c.municipio]||[]).push(c);}});
-    // 1) Quebra cidades grandes (>MAX) em pedaços ANTES de fundir
-    let grupos=[];
-    Object.values(byM).forEach(cls=>{
-      if(cls.length<=MAX){grupos.push(cls);return;}
-      const ce=_cent(cls),ord=nnOrdem(cls,ce[0],ce[1]);
-      const nParts=Math.ceil(ord.length/MAX),sz=Math.ceil(ord.length/nParts);
-      for(let i=0;i<ord.length;i+=sz) grupos.push(ord.slice(i,i+sz));
-    });
-    // 2) Fusão aglomerativa por DIÂMETRO resultante (complete-linkage com corte)
-    while(true){
-      let bi=-1,bj=-1,bd=Infinity;
-      for(let i=0;i<grupos.length;i++)for(let j=i+1;j<grupos.length;j++){
-        if(grupos[i].length+grupos[j].length>MAX) continue;
-        const dd=_diam(grupos[i].concat(grupos[j]));
-        if(dd<bd){bd=dd;bi=i;bj=j;}
-      }
-      if(bi<0||bd>DIAM_LIMIT) break;
-      grupos[bi]=grupos[bi].concat(grupos[bj]);
-      grupos.splice(bj,1);
-    }
-    return grupos;
-  }
-
-  // C1 = clientes ainda não visitados (no forceAll = todos)
-  const _naoVis=c=>!jaVisitados.has(c.cod_cliente+'_'+c.loja);
-  const remotos=blocos.filter(b=>!b.isLocal).flatMap(b=>b.clientes).filter(_naoVis);
-  const locais =blocos.filter(b=> b.isLocal).flatMap(b=>b.clientes).filter(_naoVis);
-
-  // Blocos-dia ordenados do mais distante ao mais perto de casa
-  const _distC=cls=>haversine(homeLat,homeLon,_cent(cls)[0],_cent(cls)[1]);
-  const blocosRemotos=agruparCompacto(remotos).sort((a,z)=>_distC(z)-_distC(a));
-  const blocosLocais =agruparCompacto(locais ).sort((a,z)=>_distC(z)-_distC(a));
-
-  // Preenche os dias em ciclo: ciclo 1 = cada bloco 1x; depois repete (revisitas)
-  function preencherDias(dias,blks){
-    if(!blks.length) return;
-    dias.forEach((dia,i)=>{ dia.clientes.push(...blks[i%blks.length]); });
-  }
-  preencherDias(planoOutros,blocosRemotos);
-  preencherDias(planoSexta ,blocosLocais);
-  window._blocosDia={remotos:blocosRemotos.length,locais:blocosLocais.length,
-    diasRemotos:planoOutros.length,diasLocais:planoSexta.length};
-
-  // ── 9. Revisitas: já resolvidas pela repetição de blocos no MOTOR v2 acima
-  //     (cada dia excedente reusa um bloco-dia inteiro → corredor coerente).
+  // >>> nova lógica aqui <<<
 
   // ── 10. Constrói slots com horários ──────────────────────────
   let prosContador=0;
@@ -947,9 +762,11 @@ function gerarRoteiro(forceAll=false){
         if(lastFim+CFG.pros<=CFG.horaFim){
           const munsNoDia=[...new Set(clientes.map(c=>c._mun||'?'))];
           for(const mun of munsNoDia){
-            const n=tamMun[mun]||0;
-            const bloco=blocos.find(b=>b.mun===mun);
-            const distMun=bloco?haversine(homeLat,homeLon,bloco.lat,bloco.lon):0;
+            const clsMun=porMun[mun]||[];
+            const n=clsMun.length;
+            const mLat=n?clsMun.reduce((s,c)=>s+(+c.latitude),0)/n:0;
+            const mLon=n?clsMun.reduce((s,c)=>s+(+c.longitude),0)/n:0;
+            const distMun=n?haversine(homeLat,homeLon,mLat,mLon):0;
             // ≤ 2 clientes: obrigatório | 3-5 clientes e cidade > 15km: analisa
             const deveProsp=n<=2;
             const analisaProsp=n>=3&&n<=5&&distMun>15;
@@ -958,7 +775,7 @@ function gerarRoteiro(forceAll=false){
               slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,
                 horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,
                 classificacao:'',municipio:mun,
-                lat:bloco?.lat||0,lon:bloco?.lon||0});
+                lat:mLat,lon:mLon});
               prosContador++;
               break;
             }
