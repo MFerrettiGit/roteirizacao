@@ -773,30 +773,60 @@ function gerarRoteiro(forceAll=false){
     return dias;
   }
 
-  // 3) Blocos por grupo + REVISITA por importância (padrão: faturamento 12m, ajustável)
+  // 3) Importância + blocos C1 (1ª visita) por grupo (bandas radiais)
   const _cenB=cls=>[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];
-  const _imp=c=>(+c.fat_12m||0); // grau de importância do cliente
-  // dia de REVISITA de um grupo: do mais importante ao menos, completa a rota (até MAX; <MIN → casa)
-  function revisitaDia(g,ehCasa){
-    const ord=[...g].sort((a,z)=>_imp(z)-_imp(a)).slice(0,MAX);
-    return (ord.length<MIN&&!ehCasa)?ord.concat(puxarCasa(MIN-ord.length)):ord;
-  }
-  const blocosRemotos=[]; // C1 (1ª visita) de todos os grupos remotos — cobre todos 1x
-  gruposAng.forEach((g,i)=>{diasDoGrupo(g,'G'+(i+1),false).forEach(d=>blocosRemotos.push(d));});
-  const blocosCasa=diasDoGrupo(grupoCasa,'CASA',true);
+  const _imp=c=>(+c.fat_12m||0); // grau de importância do cliente (padrão: faturamento 12m)
+  const c1Remoto=[]; // {clientes, gi} — dias de 1ª visita dos grupos remotos
+  gruposAng.forEach((g,gi)=>{diasDoGrupo(g,'G'+(gi+1),false).forEach(d=>c1Remoto.push({clientes:d,gi}));});
+  const c1Casa=diasDoGrupo(grupoCasa,'CASA',true);
 
-  // 4) REGRA 1: SEXTA = grupo casa; demais dias = grupos remotos.
-  //    Em cada trilha: primeiro os dias de 1ª visita (C1); ao esgotar, dias de REVISITA.
-  const diasSexta=plano.filter(p=>p.isSexta);
-  const diasSemana=plano.filter(p=>!p.isSexta);
-  diasSexta.forEach((dia,di)=>{
-    dia._casa=true;
-    if(grupoCasa.length) dia.clientes.push(...(di<blocosCasa.length?blocosCasa[di]:revisitaDia(grupoCasa,true)));
+  // 4) Distribuição CRONOLÓGICA. REGRA 1: sexta=casa; demais=remotos. Em cada trilha:
+  //    1ª visita (C1) primeiro, depois REVISITAS por importância. REGRA NOVA: o mesmo
+  //    cliente não pode ser visitado 2× dentro de 7 dias.
+  const NAO_REPETIR=7;
+  const ultimaVis={}; // idc -> dia (ms) da última visita atribuída
+  const _dnum=ds=>{const[y,m,dd]=ds.split('-').map(Number);return Date.UTC(y,m-1,dd);};
+  const _bloq=(c,hoje)=>{const u=ultimaVis[_idc(c)];return u!=null&&(hoje-u)<NAO_REPETIR*86400000;};
+  const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)ultimaVis[_idc(c)]=hoje;});
+  // completa um bloco até MIN com clientes do grupo (por importância) e depois casa, sem repetir <7d
+  function _completa(bloco,poolGrupo,hoje,ehCasa){
+    const ids=new Set(bloco.map(_idc));
+    if(bloco.length<MIN){
+      const extra=poolGrupo.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje)).sort((a,z)=>_imp(z)-_imp(a));
+      for(const c of extra){if(bloco.length>=MIN)break;bloco.push(c);ids.add(_idc(c));}
+    }
+    if(bloco.length<MIN&&!ehCasa){
+      let tent=0;
+      while(bloco.length<MIN&&tent++<casaPool.length*2){const f=puxarCasa(1)[0];if(f&&!_bloq(f,hoje)&&!ids.has(_idc(f))){bloco.push(f);ids.add(_idc(f));}}
+    }
+    return bloco.slice(0,MAX);
+  }
+  // trilha REMOTA (dias úteis, cronológico)
+  const remotosOrd=plano.filter(p=>!p.isSexta).sort((a,b)=>_dnum(a.data)-_dnum(b.data));
+  let c1i=0,gptr=0;
+  remotosOrd.forEach(dia=>{
+    const hoje=_dnum(dia.data);let bloco=null;
+    if(c1i<c1Remoto.length){
+      const t=c1Remoto[c1i++];
+      bloco=_completa(t.clientes.filter(c=>!_bloq(c,hoje)),gruposAng[t.gi],hoje,false);
+    }else if(gruposAng.length){
+      // revisita: escolhe grupo com >=MIN clientes livres (round-robin), mais importantes
+      let est=null;
+      for(let k=0;k<gruposAng.length;k++){const g=gruposAng[(gptr+k)%gruposAng.length];if(g.filter(c=>!_bloq(c,hoje)).length>=MIN){est=g;gptr=(gptr+k+1)%gruposAng.length;break;}}
+      if(!est){est=gruposAng.slice().sort((a,b)=>b.filter(c=>!_bloq(c,hoje)).length-a.filter(c=>!_bloq(c,hoje)).length)[0];gptr=(gptr+1)%gruposAng.length;}
+      const disp=est.filter(c=>!_bloq(c,hoje)).sort((a,z)=>_imp(z)-_imp(a));
+      bloco=_completa(disp.slice(0,MAX),est,hoje,false);
+    }
+    if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   });
-  let _revG=0;
-  diasSemana.forEach((dia,di)=>{
-    if(di<blocosRemotos.length) dia.clientes.push(...blocosRemotos[di]);
-    else if(gruposAng.length){const g=gruposAng[_revG++%gruposAng.length];dia.clientes.push(...revisitaDia(g,false));}
+  // trilha CASA (sextas, cronológico)
+  const sextasOrd=plano.filter(p=>p.isSexta).sort((a,b)=>_dnum(a.data)-_dnum(b.data));
+  let ci=0;
+  sextasOrd.forEach(dia=>{
+    dia._casa=true;const hoje=_dnum(dia.data);let bloco;
+    if(ci<c1Casa.length){bloco=_completa(c1Casa[ci++].filter(c=>!_bloq(c,hoje)),grupoCasa,hoje,true);}
+    else{bloco=_completa(grupoCasa.filter(c=>!_bloq(c,hoje)).sort((a,z)=>_imp(z)-_imp(a)).slice(0,MAX),grupoCasa,hoje,true);}
+    if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   });
 
   // Diagnóstico para validação (não afeta o roteiro)
@@ -805,7 +835,7 @@ function gerarRoteiro(forceAll=false){
     grupoCasa:grupoCasa.length,remotos:remotos.length,
     grupos:gruposAng.map((g,i)=>({g:'G'+(i+1),n:g.length,cidades:[...new Set(g.map(c=>c.municipio))].join('+'),
       rumo:Math.round(bearingDeg(homeLat,homeLon,..._cenB(g)))})),
-    blocosRemotos:blocosRemotos.length,blocosCasa:blocosCasa.length,conflitos
+    c1Remoto:c1Remoto.length,c1Casa:c1Casa.length,conflitos
   };
 
   // ── 10. Constrói slots com horários ──────────────────────────
