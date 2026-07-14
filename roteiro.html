@@ -712,10 +712,13 @@ function gerarRoteiro(forceAll=false){
   function diasDoGrupo(clientes,nome,ehCasa){
     const dias=[];
     if(!clientes.length) return dias;
-    const parts=Math.max(1,Math.ceil(clientes.length/MAX));
-    const sz=Math.ceil(clientes.length/parts);
-    for(let i=0;i<clientes.length;i+=sz){
-      let bloco=clientes.slice(i,i+sz);
+    // BANDAS RADIAIS: ordena por distância de casa (longe→perto) e fatia em dias;
+    // assim os clientes mais distantes viram um dia e os mais próximos, outro.
+    const ordenados=[...clientes].sort((a,z)=>_distH(z)-_distH(a));
+    const parts=Math.max(1,Math.ceil(ordenados.length/MAX));
+    const sz=Math.ceil(ordenados.length/parts);
+    for(let i=0;i<ordenados.length;i+=sz){
+      let bloco=ordenados.slice(i,i+sz);
       if(bloco.length<MIN&&!ehCasa){
         const fill=puxarCasa(MIN-bloco.length);
         const distMedia=bloco.reduce((s,c)=>s+_distH(c),0)/bloco.length;
