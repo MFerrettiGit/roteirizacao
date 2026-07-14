@@ -659,8 +659,7 @@ function gerarRoteiro(forceAll=false){
   // Regras absolutas: grupo = fatia angular saindo de casa; 1 grupo por dia;
   // 5–8 clientes/dia; grupo pequeno/sobra é completado pelo GRUPO DA CASA (raio).
   const HOME_RADIUS=12; // km — raio do grupo da casa (≈ dist. casa→Restinga); padrão p/ todos
-  const GAP_GRAUS=40;   // vão angular CLARO que separa dois grupos "de primeira"
-  const SPAN_MAX=85;    // se um grupo abrir mais que isto em ângulo (sem vão), corta pela LINHA CENTRAL
+  const GAP_CIDADE=13;  // vão angular (graus) entre cidades vizinhas que separa grupos
   const _idc=c=>c.cod_cliente+'_'+c.loja;
   const _distH=c=>haversine(homeLat,homeLon,+c.latitude,+c.longitude);
 
@@ -668,40 +667,29 @@ function gerarRoteiro(forceAll=false){
   const grupoCasa=todosCli.filter(c=>_distH(c)<=HOME_RADIUS);
   const remotos  =todosCli.filter(c=>_distH(c)> HOME_RADIUS);
 
-  // 1) Grupos angulares. (1a) quebra onde há VÃO CLARO; (1b) onde o leque é
-  //    contínuo e abre demais (span>SPAN_MAX), traça a LINHA CENTRAL (mediana)
-  //    e divide em dois — recursivamente, equilibrando por quantidade.
-  const cb=remotos.map(c=>({c,b:bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude)}))
-                  .sort((a,z)=>a.b-z.b);
-  const gruposAng=[];
-  if(cb.length){
-    let maxGap=-1,cut=0;
-    for(let i=0;i<cb.length;i++){
-      const j=(i+1)%cb.length;
-      let gap=cb[j].b-cb[i].b; if(gap<=0)gap+=360;
-      if(gap>maxGap){maxGap=gap;cut=j;}
-    }
-    const seq=cb.slice(cut).concat(cb.slice(0,cut)); // sem "wrap" dentro da sequência
-    // 1a) grupos base por vão claro
-    const base=[];let atual=[seq[0]];
-    for(let i=1;i<seq.length;i++){
-      let gap=seq[i].b-seq[i-1].b; if(gap<0)gap+=360;
-      if(gap>GAP_GRAUS){base.push(atual);atual=[];}
+  // 1) Grupos por ÂNGULO em nível de CIDADE — a cidade NUNCA é dividida.
+  //    Agrupa por município, ordena as cidades pelo rumo do centróide, corta o
+  //    círculo no maior vão e abre grupo novo onde o vão entre cidades vizinhas
+  //    passa de GAP_CIDADE. Angulação fina ⇒ muitos grupos pequenos.
+  const porCidade={};
+  remotos.forEach(c=>{(porCidade[c.municipio]=porCidade[c.municipio]||[]).push(c);});
+  const cidades=Object.entries(porCidade).map(([m,cls])=>{
+    const la=cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length;
+    const lo=cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length;
+    return {m,cls,b:bearingDeg(homeLat,homeLon,la,lo)};
+  }).sort((a,z)=>a.b-z.b);
+  const gruposAng=[]; // cada grupo = array de CLIENTES (cidades inteiras)
+  if(cidades.length){
+    let mg=-1,cut=0;
+    for(let i=0;i<cidades.length;i++){const j=(i+1)%cidades.length;let g=cidades[j].b-cidades[i].b;if(g<=0)g+=360;if(g>mg){mg=g;cut=j;}}
+    const seq=cidades.slice(cut).concat(cidades.slice(0,cut));
+    const gruposCid=[];let atual=[];
+    for(let i=0;i<seq.length;i++){
+      if(atual.length){let g=seq[i].b-seq[i-1].b;if(g<0)g+=360;if(g>GAP_CIDADE){gruposCid.push(atual);atual=[];}}
       atual.push(seq[i]);
     }
-    if(atual.length)base.push(atual);
-    // 1b) bisecção pela linha central enquanto o span > SPAN_MAX e der p/ 2 grupos viáveis
-    const fila=[...base];
-    while(fila.length){
-      const g=fila.shift();                       // g = [{c,b}…] em ordem de rumo
-      const span=g.length?g[g.length-1].b-g[0].b:0;
-      if(span>SPAN_MAX && g.length>=2*MIN){
-        const mid=Math.floor(g.length/2);         // linha central = mediana por quantidade
-        fila.unshift(g.slice(0,mid),g.slice(mid));
-      }else{
-        gruposAng.push(g.map(x=>x.c));
-      }
-    }
+    if(atual.length)gruposCid.push(atual);
+    gruposCid.forEach(g=>gruposAng.push(g.flatMap(cid=>cid.cls)));
   }
 
   // 2) Divide um grupo em dias de MIN..MAX; sobra <MIN é completada com o grupo da casa
@@ -742,7 +730,7 @@ function gerarRoteiro(forceAll=false){
 
   // Diagnóstico para validação (não afeta o roteiro)
   window._motorV3={
-    homeRadius:HOME_RADIUS,gapGraus:GAP_GRAUS,
+    homeRadius:HOME_RADIUS,gapCidade:GAP_CIDADE,
     grupoCasa:grupoCasa.length,remotos:remotos.length,
     grupos:gruposAng.map((g,i)=>({g:'G'+(i+1),n:g.length,cidades:[...new Set(g.map(c=>c.municipio))].join('+'),
       rumo:Math.round(bearingDeg(homeLat,homeLon,..._cenB(g)))})),
