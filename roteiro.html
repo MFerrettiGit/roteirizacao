@@ -881,21 +881,24 @@ function gerarRoteiro(forceAll=false){
   //    1ª visita (C1) primeiro, depois REVISITAS por importância. REGRA NOVA: o mesmo
   //    cliente não pode ser visitado 2× dentro de 7 dias.
   const NAO_REPETIR=7;
-  const ultimaVis={}; // idc -> dia (ms) da última visita atribuída
+  // TODAS as datas de cada cliente — não só a última. Guardar só a última perdia as
+  // marcações anteriores: um cliente do grupo casa usado como complemento nos dias 07 e
+  // 22 ficava registrado apenas no 22, e a sexta 03 (distribuída depois) o aceitava,
+  // criando visita a 4 dias da do dia 07.
+  const visitasDe={}; // idc -> [dia (ms)]
   const _dnum=ds=>{const[y,m,dd]=ds.split('-').map(Number);return Date.UTC(y,m-1,dd);};
-  // A trava de 7 dias herda as visitas REAIS dos dias já passados
-  Object.entries(histVisitas).forEach(([id,datas])=>{
-    ultimaVis[id]=Math.max(...[...datas].map(_dnum));
-  });
+  const _addVis=(id,ms)=>{(visitasDe[id]=visitasDe[id]||[]).push(ms);};
+  // A trava herda as visitas REAIS dos dias já passados
+  Object.entries(histVisitas).forEach(([id,datas])=>{[...datas].forEach(d=>_addVis(id,_dnum(d)));});
   // Agendamento também trava: o cliente não pode ser visitado <7 dias da data marcada
-  Object.entries(agPorDia).forEach(([d,ags])=>ags.forEach(a=>{
-    const u=ultimaVis[a.clienteId];const n=_dnum(d);
-    if(u==null||n>u) ultimaVis[a.clienteId]=n;
-  }));
+  Object.entries(agPorDia).forEach(([d,ags])=>ags.forEach(a=>_addVis(a.clienteId,_dnum(d))));
   // Trava nos DOIS sentidos: as sextas são distribuídas depois dos dias remotos, então
   // um cliente já marcado para um dia POSTERIOR também precisa bloquear (|diferença|).
-  const _bloq=(c,hoje)=>{const u=ultimaVis[_idc(c)];return u!=null&&Math.abs(hoje-u)<NAO_REPETIR*86400000;};
-  const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)ultimaVis[_idc(c)]=hoje;});
+  const _bloq=(c,hoje)=>{
+    const v=visitasDe[_idc(c)];
+    return !!v&&v.some(u=>Math.abs(hoje-u)<NAO_REPETIR*86400000);
+  };
+  const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)_addVis(_idc(c),hoje);});
   // Vagas do dia: o agendamento já ocupa lugar na agenda, então desconta do 5–8.
   const _nAg=dia=>(agPorDia[dia.data]||[]).length;
   // completa um bloco até o mínimo com clientes do grupo (por importância) e depois casa, sem repetir <7d
