@@ -16,15 +16,28 @@
     --border: #e2e8f0;
     --shadow: 0 4px 24px rgba(43,47,168,0.10);
   }
+  [data-theme="dark"] {
+    --azul: #6366f1;
+    --azul-dark: #4f46e5;
+    --azul-light: #818cf8;
+    --bg: #0f1020;
+    --card: #1a1b2e;
+    --text: #e8e9f3;
+    --muted: #9ca3af;
+    --border: #2d2e45;
+    --shadow: 0 4px 24px rgba(0,0,0,0.45);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Segoe UI', system-ui, sans-serif;
     background: var(--bg);
+    color: var(--text);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    transition: background .2s, color .2s;
   }
   header {
     position: fixed; top: 0; left: 0; right: 0;
@@ -35,17 +48,20 @@
     z-index: 100;
   }
   header img { height: 36px; }
-  header h1 { color: #fff; font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+  header h1 { color: #fff; font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; flex: 1; }
+  .btn-tema {
+    background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px; padding: 6px 12px; font-size: .8rem; font-weight: 600; cursor: pointer;
+    transition: background .15s;
+  }
+  .btn-tema:hover { background: rgba(255,255,255,.28); }
   .main {
     margin-top: 80px;
     width: 100%;
     max-width: 900px;
     padding: 40px 24px;
   }
-  .hero {
-    text-align: center;
-    margin-bottom: 40px;
-  }
+  .hero { text-align: center; margin-bottom: 40px; }
   .hero h2 { font-size: 1.6rem; color: var(--azul); margin-bottom: 8px; }
   .hero p { color: var(--muted); font-size: 1rem; }
 
@@ -68,6 +84,8 @@
     border-radius: 8px;
     font-size: 0.95rem;
     outline: none;
+    background: var(--card);
+    color: var(--text);
     transition: border-color .2s;
   }
   .field input:focus, .field select:focus { border-color: var(--azul); }
@@ -87,8 +105,17 @@
   .btn:hover { background: var(--azul-dark); }
   .btn:disabled { background: var(--muted); cursor: not-allowed; }
   .error { color: #dc2626; font-size: 0.85rem; margin-top: 8px; display: none; }
+  [data-theme="dark"] .error { color: #f87171; }
 
-  /* Cards de setores (gestor) */
+  .aba { flex:1; text-align:center; padding:8px; cursor:pointer; font-weight:700; font-size:.9rem;
+    color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-2px; transition:.15s; }
+  .aba.on { color:var(--azul); border-bottom-color:var(--azul); }
+
+  /* Cards de setores */
+  .escopo-pill {
+    display:inline-block; background:var(--azul); color:#fff; border-radius:999px;
+    padding:4px 12px; font-size:.72rem; font-weight:700; letter-spacing:.03em;
+  }
   .setores-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -117,26 +144,20 @@
 <header>
   <img src="assets/ferretti-branco.png" alt="Ferretti">
   <h1>Roteirização de Vendas</h1>
+  <button class="btn-tema" id="btnTema" onclick="toggleTema()">🌙 Escuro</button>
 </header>
 
 <div class="main">
   <div class="hero">
     <h2>Bem-vindo ao Sistema de Roteirização</h2>
-    <p>Entre com sua senha para acessar o roteiro do seu setor.</p>
+    <p>Entre com sua senha para acessar o roteiro.</p>
   </div>
 
   <!-- Login -->
   <div class="login-card" id="boxLogin">
-    <!-- Abas -->
     <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:20px;">
-      <div id="abaVend" onclick="setAba('vend')"
-        style="flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:var(--azul);border-bottom:2px solid var(--azul);margin-bottom:-2px;">
-        🧑‍💼 Vendedor
-      </div>
-      <div id="abaGest" onclick="setAba('gest')"
-        style="flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">
-        👔 Gestor
-      </div>
+      <div id="abaVend" class="aba on" onclick="setAba('vend')">🧑‍💼 Vendedor</div>
+      <div id="abaGest" class="aba" onclick="setAba('gest')">👔 Regional / Gerência</div>
     </div>
 
     <!-- Painel Vendedor -->
@@ -155,25 +176,29 @@
       <button class="btn" onclick="tentarLogin()">Entrar</button>
     </div>
 
-    <!-- Painel Gestor -->
+    <!-- Painel Regional / Gerência -->
     <div id="painelGest" style="display:none;">
       <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:.85rem;color:var(--muted);">
-        Acesso de gestor permite visualizar os roteiros de <strong>todos os setores</strong>.
+        A senha define o que você vê: <strong>Regional Nordeste</strong>, <strong>Regional Sul</strong>
+        (só os setores da sua regional) ou <strong>Gerência</strong> (todos os setores).
       </div>
       <div class="field">
-        <label>Senha de gestor</label>
-        <input type="password" id="inputSenhaGest" placeholder="Senha de gestor" autocomplete="current-password">
+        <label>Senha</label>
+        <input type="password" id="inputSenhaGest" placeholder="Sua senha" autocomplete="current-password">
       </div>
       <div class="error" id="erroGest">Senha incorreta.</div>
-      <button class="btn" onclick="tentarLoginGestor()">Entrar como Gestor</button>
+      <button class="btn" onclick="tentarLoginGestor()">Entrar</button>
     </div>
   </div>
 
-  <!-- Visão gestor (todos os setores) -->
+  <!-- Visão regional / gerência -->
   <div id="boxGestor" class="hidden">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h3 style="color:var(--azul)">👔 Visão do Gestor — Todos os Setores</h3>
-      <button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:0.85rem;color:var(--muted)">Sair</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+      <h3 style="color:var(--azul)" id="tituloGestor">Setores</h3>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span class="escopo-pill" id="pillEscopo"></span>
+        <button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:0.85rem;color:var(--muted)">Sair</button>
+      </div>
     </div>
     <div class="setores-grid" id="gridSetores"></div>
   </div>
@@ -184,34 +209,80 @@
 <script src="dados/clientes.js"></script>
 <script>
 // =============================================
-// SENHAS — hash SHA-256 (minúsculas, UTF-8)
+// ACESSOS — hash SHA-256 da senha em minúsculas (UTF-8), nunca em texto puro.
+// Fonte da verdade das senhas: skill `senhas` (references/senhas.json).
+//   gerencia = vê todos os setores
+//   regional = vê só os setores da sua regional
+//   vendedor = vê o próprio setor
+// A senha da roteirização (gerar o roteiro, dentro de roteiro.html) segue 'ferretti'.
 // =============================================
-// Cada setor tem uma senha própria + gestor vê tudo
-// Formato: { setor: hashSHA256 }
-// A senha "ferretti" é a senha de gestor geral (roteirização)
-// Senhas de vendedores: mesma lógica das campanhas
+const ACESSOS = [
+  // Gerência (todos os setores)
+  {h:'a4f55b36371b2ab32db9278b6d593df4157c2ea7b5b50c32a5eac40b94afe582', tipo:'gerencia', nome:'Guilherme'}, // Gui26
+  {h:'15f54d41cbfe598bd87f5109489c4f435db816e9e5ea1d14f335aa742671786b', tipo:'gerencia', nome:'Gil'},       // Gil26
+  {h:'8f21a995f2b3c950e6ebb59612a0edb6b534a4ea41a1c602393a5417e0a25876', tipo:'gerencia', nome:'Marcio'},    // Marcio26
+  {h:'6a88e91d86f376c4692a3f0cbb4d98fc910d89375bee43e569b450000e362327', tipo:'gerencia', nome:'Paulo'},     // Paulo26
+  // Regionais
+  {h:'5e8603b463a25e63cc6789221b8a0fa98d9fcaf55c2a2b13739ee439eb61e808', tipo:'regional', valor:'NORDESTE', nome:'Regional Nordeste'}, // Lopes01
+  {h:'d4a54a000a6ecff9b501ad659c1664a1a8866fb1a00a6af532c7512688f0db0e', tipo:'regional', valor:'SUL',      nome:'Regional Sul'},      // Rangel02
+];
 
-const HASHES_VENDEDOR = {}; // será populado dos dados
-const HASH_GESTOR = '8c7dd922ad47494fc02c388e12c00eac'; // MD5 não usar - usar SHA256 abaixo
+// Senha de cada setor (vendedor) — mesma da skill `senhas`.
+// Chave = setor do cadastro (A3_NREDUZ) normalizado (sem acento, maiúsculo).
+const SENHA_SETOR = {
+  'SOROCABA':         '496f31caf7df726ab7ad9d7c84f2abb371f04cef936ea5a2d042289562ee2284', // MAURICIO19
+  'S.J.BOA VISTA':    '570e2beb91e359ecde788f49d8f9f8e48f144ceb9f6cc4044d682d952290a4f4', // CELIA15
+  'SETOR PIRACICABA': '0efff8a041272fc596754a93c5c1dc39069bb78b0ed855918deeb8b1afaef64a', // COMINATO18
+  'S.J.DOS CAMPOS':   '69158fc95d6df989e0fa7edb6f3c64a05cc3ac438e7b9dea1e0382bbba7e3119', // MARIANGELA16 (grafia com acento)
+  'CIRCUITO':         '53b55f1377f1fa45810768196a01c492ac8bf6b2fd0b05706b1c8a1d6e01e6ba', // RACHEL08
+  'ATIBAIA':          'c6d8f738079870511501f4aa74c7b2f6bc3bbe262a035cf8956242692c0ef9b5', // EUGENIO05 (grafia com acento)
+  'FRANCA':           'd98135ca1d750b3f6c8e054bf7c8715a3ca3c3322ebaef1ea144a43816b2152c', // LUIS09
+  'CAMPINAS NORTE':   'ea5acf9a963a80b8ba33710b18e2cdbf2db4b2858987b82685363758ca48d6b8', // ALAN06
+  'JUNDIAI':          '861198c33307530a47dc5d9ba0ee6eb2d9dd78e84af5f609d452ac6a6e7a2345', // CASTRO12
+  'SAO CARLOS':       '04635bde2d0aa9e1b0a5c84ed736678c1c9101bfd9f9d941db352c2e9e241b5f', // BRAGATTO17
+  'ITAPETININGA':     'aa6a30d680926db949ed121bcf74d53eb68030ae1028fb6021ce18cf27fcc69c', // NELSON11
+  'RIBEIRAO PRETO':   'a1cf8577996d9ff33591000ccf6eadde5e84db9d51dea8f8b1edbd773c60d98f', // FERNANDO13
+  'INDAIATUBA':       'd06a367d0e7166b6d56ba87061f08d6521f7ad5877c8526c01edde2d704e87af', // LUCAS10
+  'CARAGUATATUBA':    '4c088950123b752060624127c337560aaebfe6be6fc11f01f67fae2acda9de40', // KARINA07
+};
+// Alias sem acento (mesma regra da skill: as duas grafias abrem o setor)
+const ALIAS_SETOR = {
+  'ATIBAIA': ['5a7e7651a1bce6ec1f356f8874f063fc81b8c1fbf6e57fda545131172095fbd4'], // EUGENIO05
+};
 
-// Hash da senha "gestor": SHA256("gestor") - calculado em runtime
-const SENHA_GESTOR_TEXTO = 'gestor'; // gestor vê todos os setores
+// Regional de cada setor (igual à base das campanhas)
+const REGIONAL_SETOR = {
+  'S.J.BOA VISTA':'NORDESTE', 'SETOR PIRACICABA':'NORDESTE', 'CIRCUITO':'NORDESTE',
+  'FRANCA':'NORDESTE', 'SAO CARLOS':'NORDESTE', 'RIBEIRAO PRETO':'NORDESTE',
+  'SOROCABA':'SUL', 'S.J.DOS CAMPOS':'SUL', 'ATIBAIA':'SUL', 'CAMPINAS NORTE':'SUL',
+  'JUNDIAI':'SUL', 'ITAPETININGA':'SUL', 'INDAIATUBA':'SUL', 'CARAGUATATUBA':'SUL',
+};
+
+const norm = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().trim();
 
 async function sha256(str) {
   const buf = await crypto.subtle.digest('SHA-256',
-    new TextEncoder().encode(str.toLowerCase()));
+    new TextEncoder().encode(str.trim().toLowerCase()));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-// =============================================
-// INIT
+// ── TEMA ──────────────────────────────────────
+function aplicarTema(t){
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('btnTema').textContent = t === 'dark' ? '☀️ Claro' : '🌙 Escuro';
+}
+function toggleTema(){
+  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('ferretti_tema', t);
+  aplicarTema(t);
+}
+
 // =============================================
 let VENDEDORES = [];
 let CLIENTES = [];
-let hashGestor = '';
 
 async function init() {
-  hashGestor = await sha256(SENHA_GESTOR_TEXTO);
+  aplicarTema(localStorage.getItem('ferretti_tema') || 'light');
 
   if (window.VENDEDORES_DATA && window.VENDEDORES_DATA.length > 0) {
     VENDEDORES = window.VENDEDORES_DATA;
@@ -226,18 +297,11 @@ async function init() {
       'Execute scripts/build-dados.ps1 para carregar os dados.';
   }
 
-  // Verifica sessão ativa
   const sessao = sessionStorage.getItem('ferretti_roteiro_sessao');
   if (sessao) {
     const s = JSON.parse(sessao);
-    if (s.tipo === 'gestor') {
-      mostrarGestor();
-      return;
-    }
-    if (s.tipo === 'vendedor') {
-      abrirRoteiro(s.setor, s.codVendedor);
-      return;
-    }
+    if (s.tipo === 'gerencia' || s.tipo === 'regional') { mostrarSetores(s); return; }
+    if (s.tipo === 'vendedor') { abrirRoteiro(s.setor, s.codVendedor); return; }
   }
 }
 
@@ -256,10 +320,9 @@ function setAba(aba) {
   const isVend = aba === 'vend';
   document.getElementById('painelVend').style.display = isVend ? 'block' : 'none';
   document.getElementById('painelGest').style.display = isVend ? 'none' : 'block';
-  document.getElementById('abaVend').style.cssText = `flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:${isVend?'var(--azul)':'var(--muted)'};border-bottom:2px solid ${isVend?'var(--azul)':'transparent'};margin-bottom:-2px;`;
-  document.getElementById('abaGest').style.cssText = `flex:1;text-align:center;padding:8px;cursor:pointer;font-weight:700;font-size:.9rem;color:${!isVend?'var(--azul)':'var(--muted)'};border-bottom:2px solid ${!isVend?'var(--azul)':'transparent'};margin-bottom:-2px;`;
-  if (isVend) document.getElementById('inputSenha').focus();
-  else document.getElementById('inputSenhaGest').focus();
+  document.getElementById('abaVend').classList.toggle('on', isVend);
+  document.getElementById('abaGest').classList.toggle('on', !isVend);
+  document.getElementById(isVend ? 'inputSenha' : 'inputSenhaGest').focus();
 }
 
 async function tentarLogin() {
@@ -271,16 +334,24 @@ async function tentarLogin() {
   if (!codVend) { erro.textContent = 'Selecione o setor.'; erro.style.display = 'block'; return; }
   const vend = VENDEDORES.find(v => v.cod === codVend);
   if (!vend) { erro.textContent = 'Setor não encontrado.'; erro.style.display = 'block'; return; }
+
   const h = await sha256(senha);
-  const hEsperado = await sha256(vend.senha);
-  if (h === hEsperado) {
+  const chave = norm(vend.setor);
+  const esperados = [SENHA_SETOR[chave], ...(ALIAS_SETOR[chave] || [])].filter(Boolean);
+  if (esperados.includes(h)) {
     sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify({
       tipo: 'vendedor', setor: vend.setor, codVendedor: vend.cod
     }));
     abrirRoteiro(vend.setor, vend.cod);
-  } else {
-    erro.textContent = 'Senha incorreta.'; erro.style.display = 'block';
+    return;
   }
+  // Gerência e o regional daquele setor também entram direto por aqui
+  const acc = ACESSOS.find(a => a.h === h);
+  if (acc && (acc.tipo === 'gerencia' || (acc.tipo === 'regional' && REGIONAL_SETOR[chave] === acc.valor))) {
+    abrirRoteiro(vend.setor, vend.cod, true);
+    return;
+  }
+  erro.textContent = 'Senha incorreta.'; erro.style.display = 'block';
 }
 
 async function tentarLoginGestor() {
@@ -289,28 +360,41 @@ async function tentarLoginGestor() {
   erro.style.display = 'none';
   if (!senha) return;
   const h = await sha256(senha);
-  if (h === hashGestor) {
-    sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify({tipo:'gestor'}));
-    mostrarGestor();
-  } else {
-    erro.style.display = 'block';
-  }
+  const acc = ACESSOS.find(a => a.h === h);
+  if (!acc) { erro.style.display = 'block'; return; }
+  const s = {tipo: acc.tipo, valor: acc.valor || null, nome: acc.nome};
+  sessionStorage.setItem('ferretti_roteiro_sessao', JSON.stringify(s));
+  mostrarSetores(s);
 }
 
-function mostrarGestor() {
+// Mostra só os setores permitidos pelo escopo da senha
+function mostrarSetores(s) {
   document.getElementById('boxLogin').classList.add('hidden');
   document.getElementById('boxGestor').classList.remove('hidden');
+  const daRegional = v => REGIONAL_SETOR[norm(v.setor)] === s.valor;
+  const lista = s.tipo === 'gerencia' ? VENDEDORES : VENDEDORES.filter(daRegional);
+
+  document.getElementById('tituloGestor').textContent =
+    s.tipo === 'gerencia' ? '👔 Gerência — Todos os Setores'
+                          : '📍 Regional ' + (s.valor === 'SUL' ? 'Sul' : 'Nordeste');
+  document.getElementById('pillEscopo').textContent = s.nome || '';
+
   const grid = document.getElementById('gridSetores');
   grid.innerHTML = '';
-  VENDEDORES.forEach(v => {
+  if (!lista.length) {
+    grid.innerHTML = '<div class="loading">Nenhum setor nesta regional.</div>';
+    return;
+  }
+  lista.forEach(v => {
     const clientes = CLIENTES.filter(c => c.cod_vendedor === v.cod);
+    const reg = REGIONAL_SETOR[norm(v.setor)] || '—';
     const card = document.createElement('div');
     card.className = 'setor-card';
     card.innerHTML = `
       <div class="icon">🗺️</div>
       <div class="nome">${v.setor}</div>
       <div class="info">${v.nome}</div>
-      <div class="info" style="margin-top:4px">${clientes.length} clientes</div>
+      <div class="info" style="margin-top:4px">${clientes.length} clientes · ${reg === 'SUL' ? 'Sul' : 'Nordeste'}</div>
     `;
     card.onclick = () => abrirRoteiro(v.setor, v.cod, true);
     grid.appendChild(card);
