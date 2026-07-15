@@ -273,7 +273,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
       <div class="stats-row">
         <div class="stat-box" id="stVisBox"><div class="sv" id="stVis">—</div><div class="sl">Visitas<br>meta 100</div></div>
         <div class="stat-box" id="stHBox"><div class="sv" id="stH">—</div><div class="sl">H. chão<br>meta 100h</div></div>
-        <div class="stat-box" id="stPBox"><div class="sv" id="stP">—</div><div class="sl">Prospecções<br>meta 2</div></div>
+        <div class="stat-box" id="stPBox"><div class="sv" id="stP">—</div><div class="sl">Prospecções<br>máx 6</div></div>
         <div class="stat-box"><div class="sv" id="stKm">—</div><div class="sl">Km total<br>estimado</div></div>
       </div>
     </div>
@@ -370,11 +370,11 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 
 <div class="senha-overlay" id="senhaOv">
   <div class="senha-box">
-    <h3>⚙️ Gerar Roteiro</h3>
-    <p>Gera o roteiro mensal por varredura geográfica, garantindo 100+ visitas.</p>
+    <h3 id="senhaTitulo">⚙️ Gerar Roteiro</h3>
+    <p id="senhaTexto">Gera o roteiro mensal por varredura geográfica, garantindo 100+ visitas.</p>
     <input type="password" id="senhaInput" placeholder="Senha" autocomplete="off">
     <div class="senha-err" id="senhaErr">Senha incorreta.</div>
-    <button class="sbtn" onclick="confirmarRoteiro()">Gerar</button>
+    <button class="sbtn" id="senhaBtn" onclick="confirmarRoteiro()">Gerar</button>
     <button class="senha-cancel" onclick="document.getElementById('senhaOv').classList.remove('show')">Cancelar</button>
   </div>
 </div>
@@ -388,9 +388,9 @@ const CFG = {
   almoco: {ini:11*60+30, fim:13*60+30}, almocoMin: 60,
   velKmH: 35, parking: 8,
   pros: 45,
-  metaVis: 100, metaH: 100, metaProsp: 2, maxProsp: 8,
+  metaVis: 100, metaH: 100, metaProsp: 6, maxProsp: 6,
   minPorDia: 5, maxPorDia: 8, maxDesvioKm: 35,
-  maxClientesSingleton: 2, // cidade com ≤ N clientes na carteira → singleton → gera prospecção
+  maxClientesSingleton: 4, // cidade com ≤ N clientes na carteira → gera prospecção (qualquer distância)
   maxAporDia: 2,
   tempoClasse: {A:90, B:60, C:45, '':30},
 };
@@ -548,14 +548,16 @@ function gerarRoteiro(forceAll=false){
 
   // ── 1. Dias passados com rota REAL salva → preserva intocável ─
   // Dias _simulado (gerados em memória mas não persistidos) são ignorados
-  const histVisitas={}; // clienteId → Set<date> das visitas salvas
-  // forceAll: regenera TUDO do zero — ignora histórico salvo (senão os dias
-  // passados poluem o histVisitas e jogam os futuros todos para revisita).
+  const histVisitas={}; // clienteId → Set<date> das visitas já feitas (dias passados)
+  // forceAll: regenera TUDO do zero — nada é preservado, logo não há histórico.
+  // Normal (ex.: novo agendamento): os dias já passados ficam INTOCADOS e o motor
+  // LÊ essas visitas — quem já foi visitado sai da 1ª visita (C1) e só volta como
+  // revisita, respeitando a trava de 7 dias a partir da data real da visita.
   if(!forceAll) util.filter(d=>d<hojeStr).forEach(d=>{
     const slots=roteiro[d];
     if(slots&&!slots._simulado){
       novoRot[d]=slots;
-      slots.filter(s=>s.clienteId&&s.tipo==='visita').forEach(s=>{
+      slots.filter(s=>s.clienteId&&(s.tipo==='visita'||s.tipo==='agendamento')).forEach(s=>{
         if(!histVisitas[s.clienteId]) histVisitas[s.clienteId]=new Set();
         histVisitas[s.clienteId].add(d);
       });
@@ -621,6 +623,17 @@ function gerarRoteiro(forceAll=false){
   if(!diasGerar.length){roteiro=novoRot;salvar();renderTudo();return;}
   const plano=diasGerar.map(d=>({data:d,clientes:[],simulado:!forceAll&&d<hojeStr,isSexta:_isSex(d)}));
 
+  // ── 6b. AGENDAMENTOS dos dias que serão gerados ──────────────
+  // O agendamento é uma visita FIXA na data marcada: o cliente sai do planejamento
+  // automático (não pode ser planejado em outro dia) e ocupa uma vaga no seu dia.
+  const _setGerar=new Set(diasGerar);
+  const agPorDia={};
+  const agendadosIds=new Set();
+  (agendamentos||[]).filter(a=>a.clienteId&&_setGerar.has(a.data)).forEach(a=>{
+    (agPorDia[a.data]=agPorDia[a.data]||[]).push(a);
+    agendadosIds.add(a.clienteId);
+  });
+
   // ── 7. CICLO 1: clientes não visitados ───────────────────────
   const jaVisitados=new Set(Object.keys(histVisitas));
 
@@ -663,7 +676,8 @@ function gerarRoteiro(forceAll=false){
   const _idc=c=>c.cod_cliente+'_'+c.loja;
   const _distH=c=>haversine(homeLat,homeLon,+c.latitude,+c.longitude);
 
-  const todosCli=pool.filter(c=>+c.latitude&&+c.longitude);
+  // Cliente com agendamento no mês sai do pool: já tem dia marcado (evita visita dupla).
+  const todosCli=pool.filter(c=>+c.latitude&&+c.longitude&&!agendadosIds.has(_idc(c)));
   const grupoCasa=todosCli.filter(c=>_distH(c)<=HOME_RADIUS);
   const remotos  =todosCli.filter(c=>_distH(c)> HOME_RADIUS);
 
@@ -775,9 +789,13 @@ function gerarRoteiro(forceAll=false){
   // 3) Importância + blocos C1 (1ª visita) por grupo (bandas radiais)
   const _cenB=cls=>[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];
   const _imp=c=>(+c.fat_12m||0); // grau de importância do cliente (padrão: faturamento 12m)
+  // C1 = 1ª visita do mês → só quem AINDA NÃO foi visitado nos dias já realizados.
+  // Quem já foi visitado só reaparece na etapa de revisita (senão o mês inteiro
+  // seria replanejado como 1ª visita e sairia todo marcado como revisita).
+  const _naoVisitado=c=>!jaVisitados.has(_idc(c));
   const c1Remoto=[]; // {clientes, gi} — dias de 1ª visita dos grupos remotos
-  gruposAng.forEach((g,gi)=>{diasDoGrupo(g,'G'+(gi+1),false).forEach(d=>c1Remoto.push({clientes:d,gi}));});
-  const c1Casa=diasDoGrupo(grupoCasa,'CASA',true);
+  gruposAng.forEach((g,gi)=>{diasDoGrupo(g.filter(_naoVisitado),'G'+(gi+1),false).forEach(d=>c1Remoto.push({clientes:d,gi}));});
+  const c1Casa=diasDoGrupo(grupoCasa.filter(_naoVisitado),'CASA',true);
 
   // 4) Distribuição CRONOLÓGICA. REGRA 1: sexta=casa; demais=remotos. Em cada trilha:
   //    1ª visita (C1) primeiro, depois REVISITAS por importância. REGRA NOVA: o mesmo
@@ -785,36 +803,48 @@ function gerarRoteiro(forceAll=false){
   const NAO_REPETIR=7;
   const ultimaVis={}; // idc -> dia (ms) da última visita atribuída
   const _dnum=ds=>{const[y,m,dd]=ds.split('-').map(Number);return Date.UTC(y,m-1,dd);};
+  // A trava de 7 dias herda as visitas REAIS dos dias já passados
+  Object.entries(histVisitas).forEach(([id,datas])=>{
+    ultimaVis[id]=Math.max(...[...datas].map(_dnum));
+  });
+  // Agendamento também trava: o cliente não pode ser visitado <7 dias da data marcada
+  Object.entries(agPorDia).forEach(([d,ags])=>ags.forEach(a=>{
+    const u=ultimaVis[a.clienteId];const n=_dnum(d);
+    if(u==null||n>u) ultimaVis[a.clienteId]=n;
+  }));
   const _bloq=(c,hoje)=>{const u=ultimaVis[_idc(c)];return u!=null&&(hoje-u)<NAO_REPETIR*86400000;};
   const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)ultimaVis[_idc(c)]=hoje;});
-  // completa um bloco até MIN com clientes do grupo (por importância) e depois casa, sem repetir <7d
-  function _completa(bloco,poolGrupo,hoje,ehCasa){
+  // Vagas do dia: o agendamento já ocupa lugar na agenda, então desconta do 5–8.
+  const _nAg=dia=>(agPorDia[dia.data]||[]).length;
+  // completa um bloco até o mínimo com clientes do grupo (por importância) e depois casa, sem repetir <7d
+  function _completa(bloco,poolGrupo,hoje,ehCasa,nAg){
+    const minEf=Math.max(0,MIN-(nAg||0)), maxEf=Math.max(1,MAX-(nAg||0));
     const ids=new Set(bloco.map(_idc));
-    if(bloco.length<MIN){
+    if(bloco.length<minEf){
       const extra=poolGrupo.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje)).sort((a,z)=>_imp(z)-_imp(a));
-      for(const c of extra){if(bloco.length>=MIN)break;bloco.push(c);ids.add(_idc(c));}
+      for(const c of extra){if(bloco.length>=minEf)break;bloco.push(c);ids.add(_idc(c));}
     }
-    if(bloco.length<MIN&&!ehCasa){
+    if(bloco.length<minEf&&!ehCasa){
       let tent=0;
-      while(bloco.length<MIN&&tent++<casaPool.length*2){const f=puxarCasa(1)[0];if(f&&!_bloq(f,hoje)&&!ids.has(_idc(f))){bloco.push(f);ids.add(_idc(f));}}
+      while(bloco.length<minEf&&tent++<casaPool.length*2){const f=puxarCasa(1)[0];if(f&&!_bloq(f,hoje)&&!ids.has(_idc(f))){bloco.push(f);ids.add(_idc(f));}}
     }
-    return bloco.slice(0,MAX);
+    return bloco.slice(0,maxEf);
   }
   // trilha REMOTA (dias úteis, cronológico)
   const remotosOrd=plano.filter(p=>!p.isSexta).sort((a,b)=>_dnum(a.data)-_dnum(b.data));
   let c1i=0,gptr=0;
   remotosOrd.forEach(dia=>{
-    const hoje=_dnum(dia.data);let bloco=null;
+    const hoje=_dnum(dia.data);const nAg=_nAg(dia);const maxEf=Math.max(1,MAX-nAg);let bloco=null;
     if(c1i<c1Remoto.length){
       const t=c1Remoto[c1i++];
-      bloco=_completa(t.clientes.filter(c=>!_bloq(c,hoje)),gruposAng[t.gi],hoje,false);
+      bloco=_completa(t.clientes.filter(c=>!_bloq(c,hoje)),gruposAng[t.gi],hoje,false,nAg);
     }else if(gruposAng.length){
       // revisita: escolhe grupo com >=MIN clientes livres (round-robin), mais importantes
       let est=null;
       for(let k=0;k<gruposAng.length;k++){const g=gruposAng[(gptr+k)%gruposAng.length];if(g.filter(c=>!_bloq(c,hoje)).length>=MIN){est=g;gptr=(gptr+k+1)%gruposAng.length;break;}}
       if(!est){est=gruposAng.slice().sort((a,b)=>b.filter(c=>!_bloq(c,hoje)).length-a.filter(c=>!_bloq(c,hoje)).length)[0];gptr=(gptr+1)%gruposAng.length;}
       const disp=est.filter(c=>!_bloq(c,hoje)).sort((a,z)=>_imp(z)-_imp(a));
-      bloco=_completa(disp.slice(0,MAX),est,hoje,false);
+      bloco=_completa(disp.slice(0,maxEf),est,hoje,false,nAg);
     }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   });
@@ -822,9 +852,9 @@ function gerarRoteiro(forceAll=false){
   const sextasOrd=plano.filter(p=>p.isSexta).sort((a,b)=>_dnum(a.data)-_dnum(b.data));
   let ci=0;
   sextasOrd.forEach(dia=>{
-    dia._casa=true;const hoje=_dnum(dia.data);let bloco;
-    if(ci<c1Casa.length){bloco=_completa(c1Casa[ci++].filter(c=>!_bloq(c,hoje)),grupoCasa,hoje,true);}
-    else{bloco=_completa(grupoCasa.filter(c=>!_bloq(c,hoje)).sort((a,z)=>_imp(z)-_imp(a)).slice(0,MAX),grupoCasa,hoje,true);}
+    dia._casa=true;const hoje=_dnum(dia.data);const nAg=_nAg(dia);const maxEf=Math.max(1,MAX-nAg);let bloco;
+    if(ci<c1Casa.length){bloco=_completa(c1Casa[ci++].filter(c=>!_bloq(c,hoje)),grupoCasa,hoje,true,nAg);}
+    else{bloco=_completa(grupoCasa.filter(c=>!_bloq(c,hoje)).sort((a,z)=>_imp(z)-_imp(a)).slice(0,maxEf),grupoCasa,hoje,true,nAg);}
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   });
 
@@ -839,15 +869,15 @@ function gerarRoteiro(forceAll=false){
 
   // ── 10. Constrói slots com horários ──────────────────────────
   let prosContador=0;
+  const cliPorId={}; pool.forEach(c=>{cliPorId[_idc(c)]=c;}); // p/ hidratar o agendamento
+  const cidProspectadas=new Set(); // não gastar as prospecções todas na mesma cidade
 
   plano.forEach((diaObj)=>{
     const {data,clientes,simulado}=diaObj;
-    if(!clientes.length) return;
 
     // Agendamentos fixos para este dia
-    const agsFix=(agendamentos||[])
-      .filter(ag=>ag.data===data)
-      .sort((a,b)=>a.hora.localeCompare(b.hora));
+    const agsFix=(agPorDia[data]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
+    if(!clientes.length&&!agsFix.length) return;
 
     // NN dentro de cada cidade, mantendo ordem dos blocos
     function nnCity(cls,sLat,sLon){
@@ -888,18 +918,29 @@ function gerarRoteiro(forceAll=false){
     let prevLat=homeLat,prevLon=homeLon;
     let agIdx=0;
 
+    // Insere o agendamento respeitando a hora marcada pelo gestor
+    function _pushAg(ag){
+      if(!almOk&&cur>=CFG.almoco.ini){
+        slots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(cur),horaFim:m2h(cur+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
+        almOk=true;cur+=CFG.almocoMin;
+      }
+      const cli=cliPorId[ag.clienteId];
+      const dur=parseInt(ag.duracao||60);
+      const ini=Math.max(cur,h2m(ag.hora));
+      slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,
+        horaIni:m2h(ini),horaFim:m2h(ini+dur),duracao:dur,obs:ag.obs||'',
+        municipio:(cli&&(cli._mun||cli.municipio))||ag.municipio||'',classificacao:(cli&&cli.classificacao)||'',
+        lat:cli?+cli.latitude:undefined,lon:cli?+cli.longitude:undefined,
+        fat12m:cli&&cli.fat_12m,mix:cli&&cli.mix_produtos,
+        ult_pedido:cli&&cli.ult_pedido,diasSemPedido:cli?diasSemPedido(cli):undefined,
+        rep:jaVisitados.has(ag.clienteId)});
+      cur=ini+dur;
+      if(cli&&+cli.latitude){prevLat=+cli.latitude;prevLon=+cli.longitude;}
+    }
+
     ordenados.forEach(c=>{
       // Agendamentos que chegaram antes deste cliente
-      while(agIdx<agsFix.length&&h2m(agsFix[agIdx].hora)<=cur){
-        const ag=agsFix[agIdx++];
-        if(!almOk&&cur>=CFG.almoco.ini){
-          slots.push({tipo:'almoco',nome:'Almoço',horaIni:m2h(cur),horaFim:m2h(cur+CFG.almocoMin),duracao:CFG.almocoMin,classificacao:''});
-          almOk=true;cur+=CFG.almocoMin;
-        }
-        const dur=parseInt(ag.duracao||60);
-        slots.push({tipo:'agendamento',clienteId:ag.clienteId,nome:ag.nomeCliente,horaIni:m2h(cur),horaFim:m2h(cur+dur),duracao:dur,obs:ag.obs||'',municipio:ag.municipio||'',classificacao:''});
-        cur+=dur;
-      }
+      while(agIdx<agsFix.length&&h2m(agsFix[agIdx].hora)<=cur) _pushAg(agsFix[agIdx++]);
 
       const travel=travelMin({lat:prevLat,lon:prevLon},{latitude:String(+c.latitude),longitude:String(+c.longitude)});
 
@@ -926,6 +967,8 @@ function gerarRoteiro(forceAll=false){
       prevLat=+c.latitude;prevLon=+c.longitude;
       cur+=dur;
     });
+    // Agendamentos marcados para depois da última visita do dia
+    while(agIdx<agsFix.length) _pushAg(agsFix[agIdx++]);
 
     // Almoço fallback se não inseriu ainda
     if(!almOk&&slots.some(s=>s.tipo==='visita')){
@@ -935,30 +978,34 @@ function gerarRoteiro(forceAll=false){
     }
 
     // ── Prospecção ────────────────────────────────────────────
+    // REGRA: cidade com MENOS DE 5 clientes na carteira (≤ maxClientesSingleton = 4),
+    // a qualquer distância, gera prospecção — no máximo CFG.maxProsp (6) no mês,
+    // 1 por dia. Prioriza cidade ainda não prospectada no mês.
+    // A prospecção entra por REGRA (não por sobra de relógio): o dia é exibido por
+    // ORDEM de visita, sem horários, e o relógio interno já estoura o expediente —
+    // prendê-la ao horário fazia com que nunca fosse gerada.
     if(prosContador<CFG.maxProsp){
       const ultimaVis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento').slice(-1)[0];
       if(ultimaVis){
         const lastFim=h2m(ultimaVis.horaFim);
-        if(lastFim+CFG.pros<=CFG.horaFim){
-          const munsNoDia=[...new Set(clientes.map(c=>c._mun||'?'))];
-          for(const mun of munsNoDia){
-            const clsMun=porMun[mun]||[];
+        {
+          const munsNoDia=[...new Set(clientes.map(c=>c._mun||'?'))]
+            .filter(m=>(porMun[m]||[]).length&&(porMun[m]||[]).length<=CFG.maxClientesSingleton)
+            // cidade menor primeiro (mais carente), e nunca repete cidade já prospectada
+            .sort((a,z)=>(cidProspectadas.has(a)-cidProspectadas.has(z))||(porMun[a].length-porMun[z].length));
+          const mun=munsNoDia.find(m=>!cidProspectadas.has(m));
+          if(mun){
+            const clsMun=porMun[mun];
             const n=clsMun.length;
-            const mLat=n?clsMun.reduce((s,c)=>s+(+c.latitude),0)/n:0;
-            const mLon=n?clsMun.reduce((s,c)=>s+(+c.longitude),0)/n:0;
-            const distMun=n?haversine(homeLat,homeLon,mLat,mLon):0;
-            // ≤ 2 clientes: obrigatório | 3-5 clientes e cidade > 15km: analisa
-            const deveProsp=n<=2;
-            const analisaProsp=n>=3&&n<=5&&distMun>15;
-            if(deveProsp||analisaProsp){
-              const label=mun.charAt(0)+mun.slice(1).toLowerCase();
-              slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,
-                horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,
-                classificacao:'',municipio:mun,
-                lat:mLat,lon:mLon});
-              prosContador++;
-              break;
-            }
+            const mLat=clsMun.reduce((s,c)=>s+(+c.latitude),0)/n;
+            const mLon=clsMun.reduce((s,c)=>s+(+c.longitude),0)/n;
+            const label=mun.charAt(0)+mun.slice(1).toLowerCase();
+            slots.push({tipo:'prospeccao',nome:`Prospecção — ${label}`,
+              horaIni:m2h(lastFim),horaFim:m2h(lastFim+CFG.pros),duracao:CFG.pros,
+              classificacao:'',municipio:mun,
+              lat:mLat,lon:mLon});
+            prosContador++;
+            cidProspectadas.add(mun);
           }
         }
       }
@@ -967,6 +1014,19 @@ function gerarRoteiro(forceAll=false){
     if(simulado) slots._simulado=true;
     novoRot[data]=slots;
   });
+
+  // ── 11. Rótulo "revisita" — passe CRONOLÓGICO sobre o mês ────
+  // rep = o cliente já foi visitado ANTES deste dia (dias realizados + o próprio
+  // plano do mês). Sem isto, a 2ª visita de um cliente novo saía como "1ª visita".
+  {
+    const _ehVis=s=>s.clienteId&&(s.tipo==='visita'||s.tipo==='agendamento');
+    const jaVis=new Set();
+    Object.keys(novoRot).sort().forEach(d=>{
+      const s=novoRot[d]||[];
+      s.forEach(x=>{if(_ehVis(x)) x.rep=jaVis.has(x.clienteId);});
+      s.forEach(x=>{if(_ehVis(x)) jaVis.add(x.clienteId);});
+    });
+  }
 
   roteiro=novoRot;
   salvar();
@@ -1006,7 +1066,7 @@ function renderStats(){
     if(!data.startsWith(ym))return;
     km+=kmDia(slots);
     slots.forEach(s=>{
-      if(s.tipo==='visita'){vis++;horas+=s.duracao/60;}
+      if(s.tipo==='visita'||s.tipo==='agendamento'){vis++;horas+=s.duracao/60;}
       if(s.tipo==='prospeccao')pros++;
     });
   });
@@ -1338,11 +1398,55 @@ function abrirAgendamento(){clienteAgendamento=null;document.getElementById('agC
 function fecharAg(){document.getElementById('ovAgendamento').classList.add('hidden');}
 function filtrarClientesAg(txt){const lista=document.getElementById('agLista');if(txt.length<2){lista.style.display='none';return;}const ms=CLIENTES.filter(c=>c.nome_cliente.toLowerCase().includes(txt.toLowerCase())||c.cod_cliente.includes(txt)).slice(0,8);if(!ms.length){lista.style.display='none';return;}lista.innerHTML=ms.map(c=>`<div class="autocomplete-item" onclick="selClienteAg('${c.cod_cliente}_${c.loja}','${c.nome_cliente.replace(/'/g,"&#39;")}','${c.municipio||''}')"><b>${c.nome_cliente}</b> <span style="color:var(--muted);font-size:.75rem">${c.municipio}</span></div>`).join('');lista.style.display='block';}
 function selClienteAg(id,nome,municipio){clienteAgendamento={id,nome,municipio};document.getElementById('agCliente').value=nome;document.getElementById('agLista').style.display='none';}
-function salvarAg(){if(!clienteAgendamento){alert('Selecione um cliente da lista.');return;}agendamentos.push({clienteId:clienteAgendamento.id,nomeCliente:clienteAgendamento.nome,municipio:clienteAgendamento.municipio,data:document.getElementById('agData').value,hora:document.getElementById('agHora').value,duracao:parseInt(document.getElementById('agDuracao').value),obs:document.getElementById('agObs').value});salvar();fecharAg();gerarRoteiro();}
+// Salvar agendamento também exige senha: ele reprograma o restante do mês.
+function salvarAg(){
+  if(!clienteAgendamento){alert('Selecione um cliente da lista.');return;}
+  const data=document.getElementById('agData').value;
+  if(!data){alert('Informe a data do agendamento.');return;}
+  if(!isUtil(data)){alert('A data escolhida não é dia útil.');return;}
+  agPendente={clienteId:clienteAgendamento.id,nomeCliente:clienteAgendamento.nome,
+    municipio:clienteAgendamento.municipio,data,
+    hora:document.getElementById('agHora').value,
+    duracao:parseInt(document.getElementById('agDuracao').value),
+    obs:document.getElementById('agObs').value};
+  fecharAg();
+  pedirSenha('agendamento');
+}
 
 // ── SENHA ─────────────────────────────────────────────────────
-function pedirSenha(){document.getElementById('senhaInput').value='';document.getElementById('senhaErr').style.display='none';document.getElementById('senhaOv').classList.add('show');setTimeout(()=>document.getElementById('senhaInput').focus(),100);}
-async function confirmarRoteiro(){const h=await sha256(document.getElementById('senhaInput').value);if(h!==hashSenha){document.getElementById('senhaErr').style.display='block';return;}document.getElementById('senhaOv').classList.remove('show');document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>Gerando roteiro...</p></div>';setTimeout(()=>gerarRoteiro(true),80);}
+// Serve aos dois fluxos: gerar o roteiro do zero e salvar um agendamento.
+let senhaAcao='roteiro', agPendente=null;
+const SENHA_UI={
+  roteiro:{t:'⚙️ Gerar Roteiro',p:'Gera o roteiro mensal por varredura geográfica, garantindo 100+ visitas. Refaz o mês inteiro, inclusive os dias já passados.',b:'Gerar'},
+  agendamento:{t:'📅 Confirmar Agendamento',p:'Fixa a visita na data marcada e reprograma os dias restantes do mês. Os dias já passados não mudam.',b:'Salvar e Regerar'}
+};
+function pedirSenha(acao){
+  senhaAcao=acao==='agendamento'?'agendamento':'roteiro';
+  const ui=SENHA_UI[senhaAcao];
+  document.getElementById('senhaTitulo').textContent=ui.t;
+  document.getElementById('senhaTexto').textContent=ui.p;
+  document.getElementById('senhaBtn').textContent=ui.b;
+  document.getElementById('senhaInput').value='';
+  document.getElementById('senhaErr').style.display='none';
+  document.getElementById('senhaOv').classList.add('show');
+  setTimeout(()=>document.getElementById('senhaInput').focus(),100);
+}
+async function confirmarRoteiro(){
+  const h=await sha256(document.getElementById('senhaInput').value);
+  if(h!==hashSenha){document.getElementById('senhaErr').style.display='block';return;}
+  document.getElementById('senhaOv').classList.remove('show');
+  const ehAg=senhaAcao==='agendamento';
+  if(ehAg){
+    if(!agPendente) return;
+    // O agendamento manda: se o cliente já tinha agendamento no mês, o novo substitui.
+    agendamentos=agendamentos.filter(a=>a.clienteId!==agPendente.clienteId);
+    agendamentos.push(agPendente);
+    agPendente=null;
+    salvar();
+  }
+  document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>'+(ehAg?'Reprogramando o mês...':'Gerando roteiro...')+'</p></div>';
+  setTimeout(()=>gerarRoteiro(!ehAg),80);
+}
 document.getElementById('senhaInput').addEventListener('keydown',e=>{if(e.key==='Enter')confirmarRoteiro();});
 
 function setView(v){viewAtual=v;['dia','semana','mes','resumo'].forEach(x=>{document.getElementById('view'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('hidden',x!==v);document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('ativo',x===v);});renderViewAtual();}
