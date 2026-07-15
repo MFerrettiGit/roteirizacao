@@ -135,6 +135,17 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .slot-card.classe-C .slot-side{background:var(--amarelo);}
 .slot-card.classe- .slot-side{background:var(--cinza);}
 
+/* Cancelar agendamento: botão no card do dia + lista dentro do modal */
+.btn-xag{align-self:center;flex-shrink:0;margin-left:8px;background:transparent;border:1.5px solid var(--border);
+  color:var(--muted);border-radius:8px;padding:6px 9px;font-size:.72rem;font-weight:700;cursor:pointer;transition:.15s;white-space:nowrap;}
+.btn-xag:hover{background:var(--vermelho);border-color:var(--vermelho);color:#fff;}
+.ag-atual{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;margin-bottom:6px;background:var(--azul-bg);}
+.ag-atual-info{flex:1;min-width:0;}
+.ag-atual-nome{font-size:.78rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ag-atual-sub{font-size:.68rem;color:var(--muted);margin-top:2px;}
+.ag-vazio{font-size:.75rem;color:var(--muted);font-style:italic;}
+
 .empty-day{text-align:center;padding:48px 20px;color:var(--muted);}
 .empty-day .ei{font-size:2.5rem;margin-bottom:12px;}
 .empty-day p{font-size:.88rem;line-height:1.6;}
@@ -352,6 +363,10 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 <div class="overlay hidden" id="ovAgendamento" onclick="if(event.target===this)fecharAg()">
   <div class="modal">
     <h3>📅 Agendamento Fixo</h3>
+    <div class="mf" id="agAtuaisWrap">
+      <label>Agendamentos deste mês</label>
+      <div id="agAtuais"></div>
+    </div>
     <div class="mf">
       <label>Cliente</label>
       <input type="text" id="agCliente" placeholder="Nome ou código" oninput="filtrarClientesAg(this.value)">
@@ -1201,7 +1216,13 @@ function renderDia(date){
       badge=`<div class="dsped"><div class="dsped-ring ${urgCls}" title="Dias sem pedido">${urgTxt}</div><div class="dsped-lbl">s/pedido</div></div>`;
       if(dias>90) tags+=`<span class="tag tag-urgente">⚠️ ${dias}d</span>`;
     }
-    if(s.tipo==='agendamento'){tags+=`<span class="tag tag-ag">🔒 Agendado</span>`;if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;}
+    let acao='';
+    if(s.tipo==='agendamento'){
+      tags+=`<span class="tag tag-ag">🔒 Agendado</span>`;
+      if(s.horaIni) sub+=`<span>🕐 ${s.horaIni}</span>`;
+      if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;
+      acao=`<button class="btn-xag" onclick="cancelarAg('${s.clienteId}','${dstr}')" title="Cancelar este agendamento">✕ Cancelar</button>`;
+    }
     if(s.tipo==='prospeccao'){tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;}
     if(s.municipio&&s.tipo!=='visita') sub+=`<span>📍 ${s.municipio}</span>`;
 
@@ -1217,7 +1238,7 @@ function renderDia(date){
           ${sub?`<div class="slot-sub">${sub}</div>`:''}
           ${tags?`<div class="slot-tags">${tags}</div>`:''}
         </div>
-        ${badge}
+        ${badge}${acao}
       </div>
     </div>`;
   });
@@ -1454,7 +1475,22 @@ function renderMapa(){
 }
 
 // ── AGENDAMENTO ───────────────────────────────────────────────
-function abrirAgendamento(){clienteAgendamento=null;document.getElementById('agCliente').value='';document.getElementById('agLista').style.display='none';document.getElementById('agData').value=ds(diaSel);document.getElementById('agHora').value='10:00';document.getElementById('agDuracao').value='60';document.getElementById('agObs').value='';document.getElementById('ovAgendamento').classList.remove('hidden');}
+function abrirAgendamento(){clienteAgendamento=null;document.getElementById('agCliente').value='';document.getElementById('agLista').style.display='none';document.getElementById('agData').value=ds(diaSel);document.getElementById('agHora').value='10:00';document.getElementById('agDuracao').value='60';document.getElementById('agObs').value='';renderAgAtuais();document.getElementById('ovAgendamento').classList.remove('hidden');}
+
+// Lista dos agendamentos do mês, cada um com o botão de cancelar
+function renderAgAtuais(){
+  const ym=mesSel.toISOString().slice(0,7);
+  const meus=(agendamentos||[]).filter(a=>a.data&&a.data.startsWith(ym)).sort((a,b)=>a.data.localeCompare(b.data));
+  const el=document.getElementById('agAtuais');
+  if(!meus.length){el.innerHTML='<div class="ag-vazio">Nenhum agendamento neste mês.</div>';return;}
+  el.innerHTML=meus.map(a=>`<div class="ag-atual">
+    <div class="ag-atual-info">
+      <div class="ag-atual-nome">${a.nomeCliente}</div>
+      <div class="ag-atual-sub">${new Date(a.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})} · ${a.hora}${a.municipio?' · '+a.municipio:''}</div>
+    </div>
+    <button class="btn-xag" onclick="cancelarAg('${a.clienteId}','${a.data}')" title="Cancelar este agendamento">✕ Cancelar</button>
+  </div>`).join('');
+}
 function fecharAg(){document.getElementById('ovAgendamento').classList.add('hidden');}
 function filtrarClientesAg(txt){const lista=document.getElementById('agLista');if(txt.length<2){lista.style.display='none';return;}const ms=CLIENTES.filter(c=>c.nome_cliente.toLowerCase().includes(txt.toLowerCase())||c.cod_cliente.includes(txt)).slice(0,8);if(!ms.length){lista.style.display='none';return;}lista.innerHTML=ms.map(c=>`<div class="autocomplete-item" onclick="selClienteAg('${c.cod_cliente}_${c.loja}','${c.nome_cliente.replace(/'/g,"&#39;")}','${c.municipio||''}')"><b>${c.nome_cliente}</b> <span style="color:var(--muted);font-size:.75rem">${c.municipio}</span></div>`).join('');lista.style.display='block';}
 function selClienteAg(id,nome,municipio){clienteAgendamento={id,nome,municipio};document.getElementById('agCliente').value=nome;document.getElementById('agLista').style.display='none';}
@@ -1473,16 +1509,29 @@ function salvarAg(){
   pedirSenha('agendamento');
 }
 
+// Cancelar um agendamento: também exige senha, porque reprograma o restante do mês
+// (o cliente volta para o planejamento automático e o dia deixa de ser do grupo dele).
+function cancelarAg(clienteId,data){
+  const ag=(agendamentos||[]).find(a=>a.clienteId===clienteId&&a.data===data);
+  if(!ag){alert('Agendamento não encontrado.');return;}
+  agCancelar={clienteId,data,nome:ag.nomeCliente};
+  fecharAg();
+  pedirSenha('cancelar');
+}
+
 // ── SENHA ─────────────────────────────────────────────────────
-// Serve aos dois fluxos: gerar o roteiro do zero e salvar um agendamento.
-let senhaAcao='roteiro', agPendente=null;
+// Serve aos três fluxos: gerar o roteiro, salvar um agendamento e cancelar um agendamento.
+let senhaAcao='roteiro', agPendente=null, agCancelar=null;
 const SENHA_UI={
   roteiro:{t:'⚙️ Gerar Roteiro',p:'Gera o roteiro mensal por varredura geográfica, garantindo 100+ visitas. Refaz o mês inteiro, inclusive os dias já passados.',b:'Gerar'},
-  agendamento:{t:'📅 Confirmar Agendamento',p:'Fixa a visita na data marcada e reprograma os dias restantes do mês. Os dias já passados não mudam.',b:'Salvar e Regerar'}
+  agendamento:{t:'📅 Confirmar Agendamento',p:'Fixa a visita na data marcada e reprograma os dias restantes do mês. Os dias já passados não mudam.',b:'Salvar e Regerar'},
+  cancelar:{t:'🗑️ Cancelar Agendamento',p:'Remove a visita marcada e reprograma os dias restantes do mês — o cliente volta para o planejamento normal. Os dias já passados não mudam.',b:'Cancelar Agendamento'}
 };
 function pedirSenha(acao){
-  senhaAcao=acao==='agendamento'?'agendamento':'roteiro';
+  senhaAcao=['agendamento','cancelar'].includes(acao)?acao:'roteiro';
   const ui=SENHA_UI[senhaAcao];
+  if(senhaAcao==='cancelar'&&agCancelar)
+    ui.p=`Remove a visita marcada de ${agCancelar.nome} em ${new Date(agCancelar.data+'T12:00:00').toLocaleDateString('pt-BR')} e reprograma os dias restantes do mês — o cliente volta para o planejamento normal. Os dias já passados não mudam.`;
   document.getElementById('senhaTitulo').textContent=ui.t;
   document.getElementById('senhaTexto').textContent=ui.p;
   document.getElementById('senhaBtn').textContent=ui.b;
@@ -1495,17 +1544,23 @@ async function confirmarRoteiro(){
   const h=await sha256(document.getElementById('senhaInput').value);
   if(h!==hashSenha){document.getElementById('senhaErr').style.display='block';return;}
   document.getElementById('senhaOv').classList.remove('show');
-  const ehAg=senhaAcao==='agendamento';
-  if(ehAg){
+  const acao=senhaAcao;
+  if(acao==='agendamento'){
     if(!agPendente) return;
     // O agendamento manda: se o cliente já tinha agendamento no mês, o novo substitui.
     agendamentos=agendamentos.filter(a=>a.clienteId!==agPendente.clienteId);
     agendamentos.push(agPendente);
     agPendente=null;
     salvar();
+  }else if(acao==='cancelar'){
+    if(!agCancelar) return;
+    agendamentos=agendamentos.filter(a=>!(a.clienteId===agCancelar.clienteId&&a.data===agCancelar.data));
+    agCancelar=null;
+    salvar();
   }
-  document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>'+(ehAg?'Reprogramando o mês...':'Gerando roteiro...')+'</p></div>';
-  setTimeout(()=>gerarRoteiro(!ehAg),80);
+  const msg=acao==='roteiro'?'Gerando roteiro...':'Reprogramando o mês...';
+  document.getElementById('timeline').innerHTML='<div class="empty-day"><div class="spinner"></div><p>'+msg+'</p></div>';
+  setTimeout(()=>gerarRoteiro(acao==='roteiro'),80);
 }
 document.getElementById('senhaInput').addEventListener('keydown',e=>{if(e.key==='Enter')confirmarRoteiro();});
 
