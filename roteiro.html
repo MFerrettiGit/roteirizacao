@@ -1057,8 +1057,9 @@ function renderDia(date){
   if(!isUtil(date)){tl.innerHTML=`<div class="empty-day"><div class="ei">🏖️</div><p>Dia não útil.</p></div>`;return;}
   if(!slots.length){tl.innerHTML=`<div class="empty-day"><div class="ei">📭</div><p>Sem roteiro para este dia.<br><small>Clique em <b>Fazer Roteirização</b> para gerar o roteiro do mês.</small></p></div>`;return;}
 
-  let h='';
-  slots.forEach(s=>{
+  let h='';let ordem=0;
+  slots.filter(s=>s.tipo!=='almoco').forEach(s=>{
+    ordem++;
     const corSide=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'var(--cinza)'}[s.classificacao]||'var(--cinza)')
       :s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)':'var(--cinza)';
 
@@ -1085,9 +1086,7 @@ function renderDia(date){
       <div class="slot-side" style="background:${corSide}"></div>
       <div class="slot-body">
         <div class="slot-hora-col">
-          <div class="hora">${s.horaIni||''}</div>
-          <div class="dur">${s.duracao}min</div>
-          ${s.horaFim?`<div class="dur" style="margin-top:1px">${s.horaFim}</div>`:''}
+          <div class="hora">${ordem}º</div>
         </div>
         <div class="slot-divider"></div>
         <div class="slot-info">
@@ -1141,10 +1140,10 @@ function renderSemana(){
     if(!isUtil(d))h+=`<div style="text-align:center;padding:16px;font-size:.75rem;color:var(--muted)">—</div>`;
     else if(!slots.length)h+=`<div style="text-align:center;padding:12px;font-size:.75rem;color:var(--muted)">Sem roteiro</div>`;
     else{
-      slots.filter(s=>s.tipo!=='almoco').forEach(s=>{
+      slots.filter(s=>s.tipo!=='almoco').forEach((s,idx)=>{
         const borda=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'var(--cinza)'}[s.classificacao]||'var(--cinza)'):'var(--azul)';
         h+=`<div class="sem-slot" style="border-left-color:${borda}" onclick="selecionarDia(new Date('${dstr}T12:00:00'));setView('dia')">
-          <div class="sh">${s.horaIni||''} · ${s.duracao}min${s.rep?' · ↩':''}</div>
+          <div class="sh">${idx+1}º${s.rep?' · ↩':''}</div>
           <div class="sn">${s.nome||''}</div>
           ${s.municipio?`<div class="sc">📍 ${s.municipio}</div>`:''}
         </div>`;
@@ -1300,7 +1299,7 @@ function renderMapa(){
     const cor=COR[s.classificacao]||'#2B2FA8';
     const bg=s.rep?'#7c3aed':cor;
     const icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
+    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>Ordem: ${i+1}º${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
     _ml.push(mk);bounds.push([s.lat,s.lon]);
   });
 
@@ -1308,7 +1307,7 @@ function renderMapa(){
   prosps.forEach(s=>{
     const mlat=s.lat+0.008,mlon=s.lon+0.008;
     const icon=L.divIcon({html:`<div style="background:#059669;color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">🌱</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    const mk=L.marker([mlat,mlon],{icon}).bindPopup(`<b>${s.nome}</b><br>📍 ${s.municipio||''}<br>⏰ ${s.horaIni}–${s.horaFim}`).addTo(mapaInst);
+    const mk=L.marker([mlat,mlon],{icon}).bindPopup(`<b>${s.nome}</b><br>📍 ${s.municipio||''}`).addTo(mapaInst);
     _ml.push(mk);bounds.push([mlat,mlon]);
   });
 
