@@ -886,7 +886,9 @@ function gerarRoteiro(forceAll=false){
   // 22 ficava registrado apenas no 22, e a sexta 03 (distribuída depois) o aceitava,
   // criando visita a 4 dias da do dia 07.
   const visitasDe={}; // idc -> [dia (ms)]
+  const afrouxadas=[]; // dias em que a trava cedeu para fechar o mínimo (diagnóstico)
   const _dnum=ds=>{const[y,m,dd]=ds.split('-').map(Number);return Date.UTC(y,m-1,dd);};
+  const _dstr=ms=>new Date(ms).toISOString().slice(0,10);
   const _addVis=(id,ms)=>{(visitasDe[id]=visitasDe[id]||[]).push(ms);};
   // A trava herda as visitas REAIS dos dias já passados
   Object.entries(histVisitas).forEach(([id,datas])=>{[...datas].forEach(d=>_addVis(id,_dnum(d)));});
@@ -894,28 +896,42 @@ function gerarRoteiro(forceAll=false){
   Object.entries(agPorDia).forEach(([d,ags])=>ags.forEach(a=>_addVis(a.clienteId,_dnum(d))));
   // Trava nos DOIS sentidos: as sextas são distribuídas depois dos dias remotos, então
   // um cliente já marcado para um dia POSTERIOR também precisa bloquear (|diferença|).
-  const _bloq=(c,hoje)=>{
+  // jan = janela da trava, em dias. Padrão NAO_REPETIR (7); pode ser afrouxada quando
+  // o dia não fecha o mínimo de visitas (ver _completa).
+  const _bloq=(c,hoje,jan)=>{
     const v=visitasDe[_idc(c)];
-    return !!v&&v.some(u=>Math.abs(hoje-u)<NAO_REPETIR*86400000);
+    const j=(jan==null?NAO_REPETIR:jan);
+    return !!v&&v.some(u=>Math.abs(hoje-u)<j*86400000);
   };
   const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)_addVis(_idc(c),hoje);});
   // Vagas do dia: o agendamento já ocupa lugar na agenda, então desconta do 5–8.
   const _nAg=dia=>(agPorDia[dia.data]||[]).length;
   // completa um bloco até o mínimo com clientes do grupo (por importância) e depois casa, sem repetir <7d
+  // REGRA DO GESTOR: o dia PRECISA fechar o mínimo de visitas. Se com a trava de 7 dias
+  // não houver clientes livres suficientes, a trava vai cedendo — 6, 5, 4… — até a rota
+  // formar. Carteiras pequenas (ex.: Atibaia, 11 clientes no grupo casa) não conseguem
+  // encher 5 sextas respeitando os 7 dias; aqui o mínimo por dia vence a trava.
   function _completa(bloco,poolGrupo,hoje,ehCasa,nAg){
     const minEf=Math.max(0,MIN-(nAg||0)), maxEf=Math.max(1,MAX-(nAg||0));
     const ids=new Set(bloco.map(_idc));
-    if(bloco.length<minEf){
-      const extra=poolGrupo.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
+    let usada=NAO_REPETIR;
+    for(let jan=NAO_REPETIR;jan>=1&&bloco.length<minEf;jan--){
+      usada=jan;
+      const extra=poolGrupo.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje,jan)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
       for(const c of extra){if(bloco.length>=minEf)break;bloco.push(c);ids.add(_idc(c));}
+      if(bloco.length<minEf&&!ehCasa){
+        let tent=0;
+        while(bloco.length<minEf&&tent++<casaPool.length*2){
+          const f=puxarCasa(1)[0];
+          if(f&&!_bloq(f,hoje,jan)&&!ids.has(_idc(f))){bloco.push(f);ids.add(_idc(f));}
+        }
+      }
     }
-    if(bloco.length<minEf&&!ehCasa){
-      let tent=0;
-      while(bloco.length<minEf&&tent++<casaPool.length*2){const f=puxarCasa(1)[0];if(f&&!_bloq(f,hoje)&&!ids.has(_idc(f))){bloco.push(f);ids.add(_idc(f));}}
-    }
+    if(usada<NAO_REPETIR&&bloco.length)
+      afrouxadas.push({data:_dstr(hoje),trava:usada+'d',visitas:bloco.length+(nAg||0)});
     return bloco.slice(0,maxEf);
   }
-  const _disp=(g,hoje)=>g.filter(c=>!_bloq(c,hoje)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
+  const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
 
   // 4b) AGENDAMENTO DEFINE O GRUPO DO DIA (regra do gestor, 2026-07-15)
   //     O dia em que há visita marcada é refeito com o grupo do cliente agendado.
@@ -1026,7 +1042,8 @@ function gerarRoteiro(forceAll=false){
     grupoCasa:grupoCasa.length,remotos:remotos.length,
     grupos:gruposAng.map((g,i)=>({g:'G'+(i+1),n:g.length,cidades:[...new Set(g.map(c=>c.municipio))].join('+'),
       rumo:Math.round(bearingDeg(homeLat,homeLon,..._cenB(g)))})),
-    c1Remoto:c1Remoto.length,c1Casa:c1Casa.length,conflitos
+    c1Remoto:c1Remoto.length,c1Casa:c1Casa.length,conflitos,
+    naoRepetir:NAO_REPETIR,afrouxadas
   };
 
   // ── 10. Constrói slots com horários ──────────────────────────
