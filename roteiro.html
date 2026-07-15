@@ -469,11 +469,17 @@ function h2m(s){const[h,m]=s.split(':').map(Number);return h*60+(m||0);}
 function haversine(la1,lo1,la2,lo2){const R=6371,d1=(la2-la1)*Math.PI/180,d2=(lo2-lo1)*Math.PI/180;const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function distKm(a,b){if(!a||!b)return 0;return haversine(+(a.latitude||a.lat),+(a.longitude||a.lon),+(b.latitude||b.lat),+(b.longitude||b.lon));}
 function travelMin(a,b){return Math.round(distKm(a,b)/CFG.velKmH*60)+CFG.parking;}
+// Média mensal de faturamento (12m, só nota faturada) e mix médio por pedido.
+// Fallback para os campos antigos enquanto um clientes.js velho estiver em cache.
+function fatMes(c){return c.fat_medio_mes!=null?+c.fat_medio_mes:(+c.fat_12m||0)/12;}
+function mixMedio(c){return c.mix_medio!=null?+c.mix_medio:(+c.mix_produtos||0);}
+function fmtBRL(v){return 'R$ '+Math.round(v||0).toLocaleString('pt-BR');}
+
 function duracaoCliente(c){
   // Duração baseada no perfil individual do cliente, não na curva A/B/C.
   // Quanto este cliente específico merece de atenção?
-  const fatM=(c.fat_12m||0)/12;
-  const mix=c.mix_produtos||0;
+  const fatM=fatMes(c);
+  const mix=mixMedio(c);
   const dias=diasSemPedido(c);
 
   // Base mínima
@@ -808,7 +814,7 @@ function gerarRoteiro(forceAll=false){
 
   // 3) Importância + blocos C1 (1ª visita) por grupo (bandas radiais)
   const _cenB=cls=>[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];
-  const _imp=c=>(+c.fat_12m||0); // grau de importância do cliente (padrão: faturamento 12m)
+  const _imp=c=>fatMes(c); // grau de importância = média mensal de faturamento (12m)
   // C1 = 1ª visita do mês → só quem AINDA NÃO foi visitado nos dias já realizados.
   // Quem já foi visitado só reaparece na etapa de revisita (senão o mês inteiro
   // seria replanejado como 1ª visita e sairia todo marcado como revisita).
@@ -1034,8 +1040,7 @@ function gerarRoteiro(forceAll=false){
         horaIni:ag.hora,horaFim:m2h(h2m(ag.hora)+dur),duracao:dur,obs:ag.obs||'',
         municipio:(cli&&(cli._mun||cli.municipio))||ag.municipio||'',classificacao:(cli&&cli.classificacao)||'',
         lat:cli?+cli.latitude:undefined,lon:cli?+cli.longitude:undefined,
-        fat12m:cli&&cli.fat_12m,mix:cli&&cli.mix_produtos,
-        ult_pedido:cli&&cli.ult_pedido,diasSemPedido:cli?diasSemPedido(cli):undefined,
+        fatMes:cli?fatMes(cli):undefined,mixMedio:cli?mixMedio(cli):undefined,
         rep:jaVisitados.has(ag.clienteId)};
     };
     const _slotVis=c=>{
@@ -1047,8 +1052,7 @@ function gerarRoteiro(forceAll=false){
         classificacao:c.classificacao||'',
         lat:+c.latitude,lon:+c.longitude,
         municipio:c._mun||c.municipio,
-        fat12m:c.fat_12m,mix:c.mix_produtos,
-        ult_pedido:c.ult_pedido,diasSemPedido:diasSemPedido(c),
+        fatMes:fatMes(c),mixMedio:mixMedio(c),
         rep:jaVisitados.has(id)};
       prevLat=+c.latitude;prevLon=+c.longitude;cur+=dur;
       return s;
@@ -1202,24 +1206,21 @@ function renderDia(date){
       :s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)':'var(--cinza)';
 
     let tags='',sub='',badge='';
+    // Do cliente, mostrar APENAS: média de faturamento (12m) e mix médio por pedido.
     if(s.tipo==='visita'){
       if(s.classificacao) tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
       if(s.rep) tags+=`<span class="tag tag-rep">↩ Revisita</span>`;
-      if(s.centralizado) tags+=`<span class="tag tag-central" title="Compra centralizada — visita única">🏢 Centralizado</span>`;
       if(s.municipio) sub+=`<span>📍 ${s.municipio}</span>`;
-      if(s.fat12m) sub+=`<span>R$ ${(s.fat12m/1000).toFixed(0)}k/ano · ${Math.round(s.fat12m/12/100)/10}k/mês</span>`;
-      if(s.mix) sub+=`<span>${s.mix} SKUs</span>`;
-      if(s.ult_pedido) sub+=`<span>Últ. pedido: ${new Date(s.ult_pedido+'T12:00:00').toLocaleDateString('pt-BR')}</span>`;
-      const dias=s.diasSemPedido||999;
-      const urgCls=dias>90?'u':dias>45?'a':'n';
-      const urgTxt=dias>=999?'S/D':dias+'d';
-      badge=`<div class="dsped"><div class="dsped-ring ${urgCls}" title="Dias sem pedido">${urgTxt}</div><div class="dsped-lbl">s/pedido</div></div>`;
-      if(dias>90) tags+=`<span class="tag tag-urgente">⚠️ ${dias}d</span>`;
+      sub+=`<span title="Média mensal faturada nos últimos 12 meses">💰 ${fmtBRL(s.fatMes)}/mês</span>`;
+      sub+=`<span title="Média de SKUs diferentes por pedido nos últimos 12 meses">📦 ${(+s.mixMedio||0).toLocaleString('pt-BR',{maximumFractionDigits:1})} SKUs/pedido</span>`;
     }
     let acao='';
     if(s.tipo==='agendamento'){
       tags+=`<span class="tag tag-ag">🔒 Agendado</span>`;
+      if(s.classificacao) tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
       if(s.horaIni) sub+=`<span>🕐 ${s.horaIni}</span>`;
+      if(s.fatMes!=null) sub+=`<span title="Média mensal faturada nos últimos 12 meses">💰 ${fmtBRL(s.fatMes)}/mês</span>`;
+      if(s.mixMedio!=null) sub+=`<span title="Média de SKUs diferentes por pedido">📦 ${(+s.mixMedio||0).toLocaleString('pt-BR',{maximumFractionDigits:1})} SKUs/pedido</span>`;
       if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;
       acao=`<button class="btn-xag" onclick="cancelarAg('${s.clienteId}','${dstr}')" title="Cancelar este agendamento">✕ Cancelar</button>`;
     }
@@ -1367,8 +1368,8 @@ function renderResumo(){
           <span style="font-weight:700">${contCls[cls]||0}</span>
         </div>`).join('')}
       <div style="margin-top:8px;font-size:.72rem;color:var(--muted);border-top:1px solid var(--border);padding-top:8px;">
-        Algoritmo: varredura angular por região · máx ${CFG.maxAporDia} A/dia<br>
-        Revisitas por: faturamento · dias s/pedido · mix baixo
+        Grupos por ângulo a partir da casa · ${CFG.minPorDia}–${CFG.maxPorDia} visitas/dia<br>
+        Revisitas por: média de faturamento (12m, faturado)
       </div>
     </div>
   `;
@@ -1440,7 +1441,7 @@ function renderMapa(){
     const cor=COR[s.classificacao]||'#2B2FA8';
     const bg=s.rep?'#7c3aed':cor;
     const icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>Ordem: ${i+1}º${s.diasSemPedido&&s.diasSemPedido<999?`<br>🕐 ${s.diasSemPedido}d s/pedido`:''}`).addTo(mapaInst);
+    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>Ordem: ${i+1}º${s.fatMes!=null?`<br>💰 ${fmtBRL(s.fatMes)}/mês<br>📦 ${(+s.mixMedio||0).toLocaleString('pt-BR',{maximumFractionDigits:1})} SKUs/pedido`:''}`).addTo(mapaInst);
     _ml.push(mk);bounds.push([s.lat,s.lon]);
   });
 

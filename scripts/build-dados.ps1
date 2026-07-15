@@ -92,9 +92,14 @@ foreach ($row in $rows) {
 
     $lat = ($row["latitude"].ToString().Trim()  -replace ',','.')
     $lon = ($row["longitude"].ToString().Trim() -replace ',','.')
-    $fat = 0.0; [double]::TryParse($row["fat_12m"].ToString(),  [Globalization.NumberStyles]::Any, [Globalization.CultureInfo]::InvariantCulture, [ref]$fat) | Out-Null
-    $mix = 0;   [int]::TryParse($row["mix_produtos"].ToString(), [ref]$mix) | Out-Null
-    $ped = 0;   [int]::TryParse($row["qtd_pedidos"].ToString(),  [ref]$ped) | Out-Null
+    # Converter o DECIMAL direto do DataRow. NUNCA via .ToString(): a cultura pt-BR gera
+    # "11087,26" e o parse InvariantCulture lê a vírgula como separador de milhar,
+    # inflando o valor 100x (era o que acontecia com o fat_12m).
+    $num = { param($v) if ($null -eq $v -or $v -is [DBNull]) { 0.0 } else { [double]$v } }
+    $fat  = & $num $row["fat_12m"]
+    $fatM = & $num $row["fat_medio_mes"]
+    $mixM = & $num $row["mix_medio"]
+    $ped  = [int](& $num $row["qtd_pedidos"])
     $vis = 0;   [int]::TryParse($row["qtd_visitas"].ToString(),  [ref]$vis) | Out-Null
 
     $todosClientes.Add(@{
@@ -108,8 +113,9 @@ foreach ($row in $rows) {
         classificacao = $row["classificacao"].ToString().Trim()
         tipo_cliente  = $row["tipo_cliente"].ToString().Trim()
         cnpj          = $row["cnpj"].ToString().Trim()
+        fat_medio_mes = [math]::Round($fatM, 2)
+        mix_medio     = [math]::Round($mixM, 1)
         fat_12m       = [math]::Round($fat, 2)
-        mix_produtos  = $mix
         qtd_pedidos   = $ped
         ult_pedido    = $row["ult_pedido"].ToString().Trim()
         ult_visita    = $row["ult_visita"].ToString().Trim()
