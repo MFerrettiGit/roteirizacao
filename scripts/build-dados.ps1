@@ -150,4 +150,46 @@ window.DADOS_ATUALIZADOS_EM = '$ts';
 "@ | Out-File $OutFile -Encoding utf8 -NoNewline
 
 Log "clientes.js gerado ($($todosClientes.Count) clientes, $($vendedores.Count) vendedores)"
+
+# ── PRODUTOS POR CLIENTE (o que vende e quanto sai por mês) ───────────────
+$SqlProd = Join-Path $RepoRoot "sql\query-produtos-cliente.sql"
+$OutProd = Join-Path $OutputDir "produtos-cliente.js"
+try {
+    $conn2 = New-Object System.Data.SqlClient.SqlConnection($cs)
+    $conn2.Open()
+    $cmd2 = $conn2.CreateCommand()
+    $cmd2.CommandText   = (Get-Content $SqlProd -Raw -Encoding UTF8)
+    $cmd2.CommandTimeout = 600
+    $da2 = New-Object System.Data.SqlClient.SqlDataAdapter $cmd2
+    $ds2 = New-Object System.Data.DataSet
+    $da2.Fill($ds2) | Out-Null
+    $conn2.Close()
+} catch { Log "ERRO na query de produtos: $_"; exit 1 }
+
+$rowsP = $ds2.Tables[0].Rows
+Log "Produtos por cliente: $($rowsP.Count) linhas."
+
+# Só clientes que estão no roteiro; mantém a ordem (maior valor primeiro)
+$idsRoteiro = @{}; foreach ($c in $todosClientes) { $idsRoteiro[$c.cod_cliente + '_' + $c.loja] = $true }
+$porCli = [ordered]@{}
+foreach ($r in $rowsP) {
+    $id = $r["cod_cliente"].ToString().Trim() + '_' + $r["loja"].ToString().Trim()
+    if (-not $idsRoteiro.ContainsKey($id)) { continue }
+    if (-not $porCli.Contains($id)) { $porCli[$id] = [System.Collections.Generic.List[string]]::new() }
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $v = if ($r["valor_medio_mes"] -is [DBNull]) { 0.0 } else { [double]$r["valor_medio_mes"] }
+    $q = if ($r["qtd_media_mes"]   -is [DBNull]) { 0.0 } else { [double]$r["qtd_media_mes"] }
+    $d = ($r["descricao"].ToString().Trim() -replace '"', "'")
+    $p = $r["cod_produto"].ToString().Trim()
+    $porCli[$id].Add('{"p":"' + $p + '","d":"' + $d + '","v":' + $v.ToString("F2",$inv) + ',"q":' + $q.ToString("F2",$inv) + '}')
+}
+$prodPairs = foreach ($k in $porCli.Keys) { '"' + $k + '":[' + (($porCli[$k]) -join ',') + ']' }
+@"
+// Gerado automaticamente por scripts/build-dados.ps1 em $ts
+// NAO editar manualmente
+// { "codcliente_loja": [ {p:codigo, d:descricao, v:valor medio/mes, q:qtd media/mes} ] }
+window.PRODUTOS_CLIENTE = {$($prodPairs -join ',')};
+"@ | Out-File $OutProd -Encoding utf8 -NoNewline
+Log "produtos-cliente.js gerado ($($porCli.Count) clientes)"
+
 Log "=== build-dados concluído ==="

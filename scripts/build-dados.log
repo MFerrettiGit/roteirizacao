@@ -34,3 +34,52 @@ Invalid column name 'ZZLONG'."
 2026-07-06 15:29:18  Vendedores: 35 | Clientes com geo: 2215
 2026-07-06 15:29:18  clientes.js gerado (2215 clientes, 35 vendedores)
 2026-07-06 15:29:18  === build-dados concluÃ­do ===
+2026-07-07 06:00:01  === Iniciando build-dados ===
+2026-07-07 06:00:01  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-07 06:01:01  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-08 06:00:03  === Iniciando build-dados ===
+2026-07-08 06:00:03  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-08 06:01:03  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-08 07:59:08  === Iniciando build-dados ===
+2026-07-08 07:59:08  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-08 07:59:09  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-08 07:59:12  Query retornou 1298 registros.
+2026-07-08 07:59:12  Vendedores: 14 | Clientes com geo: 1298
+2026-07-08 07:59:13  clientes.js gerado (1298 clientes, 14 vendedores)
+2026-07-08 07:59:13  === build-dados concluÃ­do ===
+2026-07-14 06:00:02  === Iniciando build-dados ===
+2026-07-14 06:00:02  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-14 06:01:02  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-15 06:00:04  === Iniciando build-dados ===
+2026-07-15 06:00:04  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-15 06:01:04  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-15 13:46:40  === Iniciando build-dados ===
+2026-07-15 13:46:40  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-15 13:46:40  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-15 13:46:41  Query retornou 1130 registros.
+2026-07-15 13:46:42  Vendedores: 14 | Clientes com geo: 1130
+2026-07-15 13:46:42  clientes.js gerado (1130 clientes, 14 vendedores)
+2026-07-15 13:46:42  === build-dados concluÃ­do ===
+2026-07-15 13:49:11  === Iniciando build-dados ===
+2026-07-15 13:49:11  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-15 13:49:11  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-15 13:49:12  Query retornou 1130 registros.
+2026-07-15 13:49:12  Vendedores: 14 | Clientes com geo: 1130
+2026-07-15 13:49:13  clientes.js gerado (1130 clientes, 14 vendedores)
+2026-07-15 13:49:13  === build-dados concluÃ­do ===
+2026-07-15 13:56:48  === Iniciando build-dados ===
+2026-07-15 13:56:48  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-15 13:56:48  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-15 13:56:50  Query retornou 1050 registros.
+2026-07-15 13:56:50  Vendedores: 14 | Clientes com geo: 1050
+2026-07-15 13:56:50  clientes.js gerado (1050 clientes, 14 vendedores)
+2026-07-15 13:56:50  === build-dados concluÃ­do ===
+2026-07-15 14:17:03  === Iniciando build-dados ===
+2026-07-15 14:17:03  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-15 14:17:03  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-15 14:17:05  Query retornou 1050 registros.
+2026-07-15 14:17:05  Vendedores: 14 | Clientes com geo: 1050
+2026-07-15 14:17:05  clientes.js gerado (1050 clientes, 14 vendedores)
+2026-07-15 14:17:07  Produtos por cliente: 64212 linhas.
+2026-07-15 14:17:08  produtos-cliente.js gerado (1050 clientes)
+2026-07-15 14:17:08  === build-dados concluÃ­do ===

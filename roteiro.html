@@ -135,6 +135,22 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .slot-card.classe-C .slot-side{background:var(--amarelo);}
 .slot-card.classe- .slot-side{background:var(--cinza);}
 
+/* Modal: produtos que o vendedor vende para o cliente */
+.slot-card.tipo-visita .slot-body,.slot-card.tipo-agendamento .slot-body{cursor:pointer;}
+.slot-card.tipo-visita .slot-body:hover,.slot-card.tipo-agendamento .slot-body:hover{background:var(--azul-bg);}
+.prod-modal{max-width:720px;width:96%;}
+.prod-head{display:flex;gap:14px;flex-wrap:wrap;padding:10px 12px;border-radius:9px;background:var(--azul-bg);margin-bottom:10px;}
+.prod-kpi .k{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+.prod-kpi .v{font-size:.95rem;font-weight:800;}
+.prod-tbl{width:100%;border-collapse:collapse;font-size:.76rem;}
+.prod-tbl th{position:sticky;top:0;background:var(--card);text-align:left;font-size:.63rem;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1.5px solid var(--border);}
+.prod-tbl td{padding:6px 8px;border-bottom:1px solid var(--border);}
+.prod-tbl td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.prod-tbl tr:hover td{background:var(--azul-bg);}
+.prod-wrap{max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:9px;}
+.prod-cod{color:var(--muted);font-size:.68rem;}
+
 /* Cancelar agendamento: botão no card do dia + lista dentro do modal */
 .btn-xag{align-self:center;flex-shrink:0;margin-left:8px;background:transparent;border:1.5px solid var(--border);
   color:var(--muted);border-radius:8px;padding:6px 9px;font-size:.72rem;font-weight:700;cursor:pointer;transition:.15s;white-space:nowrap;}
@@ -360,6 +376,16 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
   </div>
 </div>
 
+<div class="overlay hidden" id="ovProdutos" onclick="if(event.target===this)fecharProdutos()">
+  <div class="modal prod-modal">
+    <h3 id="prodTitulo">Produtos do cliente</h3>
+    <div id="prodConteudo"></div>
+    <div class="modal-btns">
+      <button class="mbtn mbtn-cancel" onclick="fecharProdutos()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay hidden" id="ovAgendamento" onclick="if(event.target===this)fecharAg()">
   <div class="modal">
     <h3>📅 Agendamento Fixo</h3>
@@ -396,6 +422,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 
 <script src="dados/clientes.js"></script>
 <script src="dados/vendedores.js"></script>
+<script src="dados/produtos-cliente.js"></script>
 <script>
 // ── CONFIG ──────────────────────────────────────────────────
 const CFG = {
@@ -474,6 +501,7 @@ function travelMin(a,b){return Math.round(distKm(a,b)/CFG.velKmH*60)+CFG.parking
 function fatMes(c){return c.fat_medio_mes!=null?+c.fat_medio_mes:(+c.fat_12m||0)/12;}
 function mixMedio(c){return c.mix_medio!=null?+c.mix_medio:(+c.mix_produtos||0);}
 function fmtBRL(v){return 'R$ '+Math.round(v||0).toLocaleString('pt-BR');}
+function fmtMix(v){return (+v||0).toLocaleString('pt-BR',{maximumFractionDigits:1});}
 
 function duracaoCliente(c){
   // Duração baseada no perfil individual do cliente, não na curva A/B/C.
@@ -510,7 +538,18 @@ function duracaoCliente(c){
 function diasUteis(ano,mes){const d=new Date(ano,mes,1),r=[];while(d.getMonth()===mes){if(isUtil(d))r.push(ds(new Date(d)));d.setDate(d.getDate()+1);}return r;}
 function nomeDataLongo(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});}
 function diasSemPedido(c){if(!c.ult_pedido)return 999;return Math.round((new Date()-new Date(c.ult_pedido+'T12:00:00'))/86400000);}
-function kmDia(slots){const pts=slots.filter(s=>s.lat&&s.lon);let km=0;for(let i=1;i<pts.length;i++)km+=haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);return km;}
+// Km rodado no dia: casa → paradas (na ordem) → casa.
+function kmDia(slots){
+  const pts=(slots||[]).filter(s=>s.lat&&s.lon);
+  if(!pts.length)return 0;
+  let km=0;for(let i=1;i<pts.length;i++)km+=haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);
+  const h=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
+  if(h){km+=haversine(h.lat,h.lon,pts[0].lat,pts[0].lon);
+        km+=haversine(pts[pts.length-1].lat,pts[pts.length-1].lon,h.lat,h.lon);}
+  return km;
+}
+// Rede = mesmo cadastro (mesmo código de cliente, lojas diferentes)
+function nomeRede(n){return (n||'').replace(/\s*[-–]\s*LOJA\s*\d+\.?\s*$/i,'').replace(/\s+LTDA\.?$/i,'').trim()||n||'—';}
 
 // ── PERSISTÊNCIA ─────────────────────────────────────────────
 function chv(t){const ym=mesSel.toISOString().slice(0,7).replace('-','');return`fr_rot_${t}_${COD}_${ym}`;}
@@ -521,7 +560,21 @@ function salvar(){
   localStorage.setItem(chv('r'),JSON.stringify(toSave));
   localStorage.setItem(chv('ag'),JSON.stringify(agendamentos));
 }
-function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.getItem(chv('ag'));roteiro=r?JSON.parse(r):{};agendamentos=a?JSON.parse(a):[];}
+function carregarEstado(){const r=localStorage.getItem(chv('r')),a=localStorage.getItem(chv('ag'));roteiro=r?JSON.parse(r):{};agendamentos=a?JSON.parse(a):[];hidratar();}
+// Dias já salvos (roteirizados antes) guardam os campos antigos. Repõe fatMes/mixMedio
+// a partir do cadastro atual, senão os dias passados aparecem sem esses números.
+function hidratar(){
+  const ix={};CLIENTES.forEach(c=>{ix[c.cod_cliente+'_'+c.loja]=c;});
+  Object.values(roteiro||{}).forEach(slots=>{
+    (slots||[]).forEach(s=>{
+      if(!s.clienteId||(s.tipo!=='visita'&&s.tipo!=='agendamento'))return;
+      const c=ix[s.clienteId];if(!c)return;
+      s.fatMes=fatMes(c);s.mixMedio=mixMedio(c);
+      if(!s.municipio)s.municipio=c.municipio;
+      if(!s.classificacao)s.classificacao=c.classificacao||'';
+    });
+  });
+}
 
 // ══════════════════════════════════════════════════════════════
 // Ordenador de ROTA FECHADA (casa → paradas → casa), consciente da volta.
@@ -1212,7 +1265,7 @@ function renderDia(date){
       if(s.rep) tags+=`<span class="tag tag-rep">↩ Revisita</span>`;
       if(s.municipio) sub+=`<span>📍 ${s.municipio}</span>`;
       sub+=`<span title="Média mensal faturada nos últimos 12 meses">💰 ${fmtBRL(s.fatMes)}/mês</span>`;
-      sub+=`<span title="Média de SKUs diferentes por pedido nos últimos 12 meses">📦 ${(+s.mixMedio||0).toLocaleString('pt-BR',{maximumFractionDigits:1})} SKUs/pedido</span>`;
+      sub+=`<span title="Mix médio: SKUs diferentes por pedido (12 meses)">📦 ${fmtMix(s.mixMedio)} mix médio</span>`;
     }
     let acao='';
     if(s.tipo==='agendamento'){
@@ -1220,16 +1273,18 @@ function renderDia(date){
       if(s.classificacao) tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
       if(s.horaIni) sub+=`<span>🕐 ${s.horaIni}</span>`;
       if(s.fatMes!=null) sub+=`<span title="Média mensal faturada nos últimos 12 meses">💰 ${fmtBRL(s.fatMes)}/mês</span>`;
-      if(s.mixMedio!=null) sub+=`<span title="Média de SKUs diferentes por pedido">📦 ${(+s.mixMedio||0).toLocaleString('pt-BR',{maximumFractionDigits:1})} SKUs/pedido</span>`;
+      if(s.mixMedio!=null) sub+=`<span title="Mix médio: SKUs diferentes por pedido (12 meses)">📦 ${fmtMix(s.mixMedio)} mix médio</span>`;
       if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;
-      acao=`<button class="btn-xag" onclick="cancelarAg('${s.clienteId}','${dstr}')" title="Cancelar este agendamento">✕ Cancelar</button>`;
+      acao=`<button class="btn-xag" onclick="event.stopPropagation();cancelarAg('${s.clienteId}','${dstr}')" title="Cancelar este agendamento">✕ Cancelar</button>`;
     }
     if(s.tipo==='prospeccao'){tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;}
     if(s.municipio&&s.tipo!=='visita') sub+=`<span>📍 ${s.municipio}</span>`;
 
+    const abre=(s.tipo==='visita'||s.tipo==='agendamento')&&s.clienteId
+      ?` onclick="abrirProdutos('${s.clienteId}')" title="Ver os produtos que vende para este cliente"`:'';
     h+=`<div class="slot-card tipo-${s.tipo} classe-${s.classificacao||''}">
       <div class="slot-side" style="background:${corSide}"></div>
-      <div class="slot-body">
+      <div class="slot-body"${abre}>
         <div class="slot-hora-col">
           <div class="hora">${ordem}º</div>
         </div>
@@ -1338,7 +1393,39 @@ function renderResumo(){
   const pV=Math.min(100,Math.round(tv/CFG.metaVis*100));
   const pP=Math.min(100,Math.round(tp/CFG.metaProsp*100));
 
+  // Visitas por cliente e por rede (rede = mesmo código de cliente, lojas diferentes)
+  const porCli={},porRede={};
+  diasMes.forEach(data=>(roteiro[data]||[]).forEach(s=>{
+    if((s.tipo!=='visita'&&s.tipo!=='agendamento')||!s.clienteId)return;
+    const c=porCli[s.clienteId]=porCli[s.clienteId]||{n:0,nome:s.nome,mun:s.municipio,id:s.clienteId};
+    c.n++;
+    const cod=s.clienteId.split('_')[0];
+    const r=porRede[cod]=porRede[cod]||{n:0,nome:nomeRede(s.nome),lojas:new Set()};
+    r.n++;r.lojas.add(s.clienteId);
+  }));
+  const mais2=Object.values(porCli).filter(c=>c.n>2).sort((a,z)=>z.n-a.n);
+  const redes=Object.values(porRede).sort((a,z)=>z.n-a.n);
+  const top=redes[0];
+
   document.getElementById('resumoCards').innerHTML=`
+    <div class="res-card">
+      <h4>RESUMO DO MÊS</h4>
+      <div class="res-big">${tv}</div>
+      <div class="res-sub">visitas que ele vai fazer</div>
+      <div class="res-list" style="margin-top:12px">
+        <div class="res-item"><span class="ri-label">Km rodado</span><span class="ri-val">~${Math.round(tk).toLocaleString('pt-BR')} km</span></div>
+        <div class="res-item"><span class="ri-label">Clientes com mais de 2 visitas</span><span class="ri-val" style="color:var(--roxo)">${mais2.length}</span></div>
+        <div class="res-item"><span class="ri-label">Rede mais visitada</span><span class="ri-val">${top?top.nome:'—'}</span></div>
+        ${top?`<div class="res-item"><span class="ri-label" style="padding-left:10px">↳ visitas na rede</span><span class="ri-val">${top.n}${top.lojas.size>1?` (${top.lojas.size} lojas)`:''}</span></div>`:''}
+      </div>
+      ${mais2.length?`<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+        <div style="font-size:.63rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Quais clientes (mais de 2 visitas)</div>
+        <div style="max-height:190px;overflow:auto;">
+        ${mais2.map(c=>`<div class="res-item" style="cursor:pointer" onclick="abrirProdutos('${c.id}')" title="Ver os produtos deste cliente">
+          <span class="ri-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${c.nome}</span>
+          <span class="ri-val">${c.n}×</span></div>`).join('')}
+        </div></div>`:''}
+    </div>
     <div class="res-card">
       <h4>METAS DO MÊS</h4>
       <div class="res-list">
@@ -1350,11 +1437,11 @@ function renderResumo(){
     </div>
     <div class="res-card">
       <h4>COBERTURA</h4>
-      <div class="res-big">~${Math.round(tk)}km</div>
-      <div class="res-sub">distância total estimada</div>
+      <div class="res-big">${cidsSet.size}</div>
+      <div class="res-sub">cidades no mês</div>
       <div class="res-list" style="margin-top:12px">
         <div class="res-item"><span class="ri-label">Dias com roteiro</span><span class="ri-val">${diasMes.length}</span></div>
-        <div class="res-item"><span class="ri-label">Cidades cobertas</span><span class="ri-val">${cidsSet.size}</span></div>
+        <div class="res-item"><span class="ri-label">Clientes distintos</span><span class="ri-val">${Object.keys(porCli).length}</span></div>
         <div class="res-item"><span class="ri-label">Média visitas/dia</span><span class="ri-val">${diasMes.length?(tv/diasMes.length).toFixed(1):'—'}</span></div>
         <div class="res-item"><span class="ri-label">Revisitas planejadas</span><span class="ri-val" style="color:var(--roxo)">${trep}</span></div>
       </div>
@@ -1474,6 +1561,34 @@ function renderMapa(){
 
   if(bounds.length)mapaInst.fitBounds(bounds,{padding:[40,40]});
 }
+
+// ── PRODUTOS DO CLIENTE ───────────────────────────────────────
+// Clicou no cliente: o que o vendedor vende para ele e quanto sai por mês (média 12m).
+function abrirProdutos(clienteId){
+  const c=CLIENTES.find(x=>x.cod_cliente+'_'+x.loja===clienteId);
+  const itens=(window.PRODUTOS_CLIENTE&&window.PRODUTOS_CLIENTE[clienteId])||[];
+  document.getElementById('prodTitulo').textContent=c?c.nome_cliente:'Produtos do cliente';
+  const total=itens.reduce((s,i)=>s+(+i.v||0),0);
+  const head=`<div class="prod-head">
+    ${c?`<div class="prod-kpi"><div class="k">Cidade</div><div class="v">${c.municipio||'—'}</div></div>`:''}
+    <div class="prod-kpi"><div class="k">Média/mês</div><div class="v">${fmtBRL(c?fatMes(c):total)}</div></div>
+    <div class="prod-kpi"><div class="k">Mix médio</div><div class="v">${c?fmtMix(mixMedio(c)):'—'}</div></div>
+    <div class="prod-kpi"><div class="k">Produtos que compra</div><div class="v">${itens.length}</div></div>
+  </div>`;
+  const corpo=itens.length
+    ? `<div class="prod-wrap"><table class="prod-tbl">
+        <thead><tr><th>Produto</th><th style="text-align:right">Qtd/mês</th><th style="text-align:right">Média/mês</th></tr></thead>
+        <tbody>${itens.map(i=>`<tr>
+          <td>${i.d||'—'}<div class="prod-cod">${i.p}</div></td>
+          <td class="n">${fmtMix(i.q)}</td>
+          <td class="n">${fmtBRL(i.v)}</td></tr>`).join('')}</tbody>
+       </table></div>
+       <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">Média mensal dos últimos 12 meses, sobre o que foi faturado.</div>`
+    : `<div class="ag-vazio">Sem produtos faturados nos últimos 12 meses.</div>`;
+  document.getElementById('prodConteudo').innerHTML=head+corpo;
+  document.getElementById('ovProdutos').classList.remove('hidden');
+}
+function fecharProdutos(){document.getElementById('ovProdutos').classList.add('hidden');}
 
 // ── AGENDAMENTO ───────────────────────────────────────────────
 function abrirAgendamento(){clienteAgendamento=null;document.getElementById('agCliente').value='';document.getElementById('agLista').style.display='none';document.getElementById('agData').value=ds(diaSel);document.getElementById('agHora').value='10:00';document.getElementById('agDuracao').value='60';document.getElementById('agObs').value='';renderAgAtuais();document.getElementById('ovAgendamento').classList.remove('hidden');}
