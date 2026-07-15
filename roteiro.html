@@ -328,7 +328,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
       <div id="metaAlerta" style="display:none" class="meta-alerta erro"></div>
       <div class="dia-cards">
         <div class="dcard"><div class="dc-icon">👥</div><div class="dc-val" id="dcClientes">—</div><div class="dc-lbl">Visitas hoje</div><div class="dc-sub" id="dcRep"></div></div>
-        <div class="dcard"><div class="dc-icon">✨</div><div class="dc-val" id="dcNovas">—</div><div class="dc-lbl">1ª visita hoje</div></div>
+        <div class="dcard"><div class="dc-icon">💰</div><div class="dc-val" id="dcFat">—</div><div class="dc-lbl">Média/mês no dia</div></div>
         <div class="dcard"><div class="dc-icon">🚗</div><div class="dc-val" id="dcKm">—</div><div class="dc-lbl">Km estimado</div></div>
         <div class="dcard"><div class="dc-icon">📍</div><div class="dc-val" style="font-size:.9rem" id="dcCidades">—</div><div class="dc-lbl">Cidades</div><div class="dc-sub" id="dcPros"></div></div>
       </div>
@@ -1224,14 +1224,13 @@ function renderDia(date){
   const dstr=ds(date),slots=roteiro[dstr]||[];
   const hoje=ds(new Date());
   const vis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
-  const reps=vis.filter(s=>s.rep);
   const km=Math.round(kmDia(slots));
   const cids=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
   const pros=slots.filter(s=>s.tipo==='prospeccao');
 
   document.getElementById('dcClientes').textContent=vis.length||'—';
-  document.getElementById('dcRep').textContent=reps.length?`↩ ${reps.length} revisita${reps.length>1?'s':''}`:vis.length?`✓ ${vis.length} únicas`:'';
-  document.getElementById('dcNovas').textContent=vis.length?(vis.length-reps.length):'—';
+  document.getElementById('dcRep').textContent='';
+  document.getElementById('dcFat').textContent=vis.length?fmtBRL(vis.reduce((s,x)=>s+(+x.fatMes||0),0)):'—';
   document.getElementById('dcKm').textContent=km?km+'km':'—';
   document.getElementById('dcCidades').textContent=cids.join(' · ')||'—';
   document.getElementById('dcPros').textContent=pros.length?'🌱 prospecção':'';
@@ -1262,7 +1261,6 @@ function renderDia(date){
     // Do cliente, mostrar APENAS: média de faturamento (12m) e mix médio por pedido.
     if(s.tipo==='visita'){
       if(s.classificacao) tags+=`<span class="tag tag-${s.classificacao}">${s.classificacao}</span>`;
-      if(s.rep) tags+=`<span class="tag tag-rep">↩ Revisita</span>`;
       if(s.municipio) sub+=`<span>📍 ${s.municipio}</span>`;
       sub+=`<span title="Média mensal faturada nos últimos 12 meses">💰 ${fmtBRL(s.fatMes)}/mês</span>`;
       sub+=`<span title="Mix médio: SKUs diferentes por pedido (12 meses)">📦 ${fmtMix(s.mixMedio)} mix médio</span>`;
@@ -1306,12 +1304,11 @@ function renderSbDia(){
   const div=document.getElementById('sbDiaResumo');
   if(!slots.length){div.textContent='Sem roteiro para este dia.';return;}
   const vis=slots.filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
-  const reps=vis.filter(s=>s.rep).length;
   const km=Math.round(kmDia(slots));
   const pros=slots.filter(s=>s.tipo==='prospeccao').length;
   const cids=[...new Set(slots.filter(s=>s.municipio).map(s=>s.municipio))];
   div.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px;">
-    <div class="resumo-item"><span class="ri-dot" style="background:var(--azul)"></span><b>${vis.length}</b> visitas (${vis.length-reps} únicas${reps?`, ${reps} revisitas`:''})</div>
+    <div class="resumo-item"><span class="ri-dot" style="background:var(--azul)"></span><b>${vis.length}</b> visitas</div>
     ${pros?`<div class="resumo-item"><span class="ri-dot" style="background:var(--verde)"></span><b>${pros}</b> prospecção</div>`:''}
     <div class="resumo-item"><span class="ri-dot" style="background:var(--laranja)"></span><b>~${km}km</b> estimado</div>
     ${cids.map(c=>`<div class="resumo-item"><span class="ri-dot" style="background:var(--muted)"></span>${c}</div>`).join('')}
@@ -1343,7 +1340,7 @@ function renderSemana(){
       slots.filter(s=>s.tipo!=='almoco').forEach((s,idx)=>{
         const borda=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'var(--cinza)'}[s.classificacao]||'var(--cinza)'):'var(--azul)';
         h+=`<div class="sem-slot" style="border-left-color:${borda}" onclick="selecionarDia(new Date('${dstr}T12:00:00'));setView('dia')">
-          <div class="sh">${idx+1}º${s.rep?' · ↩':''}</div>
+          <div class="sh">${idx+1}º</div>
           <div class="sn">${s.nome||''}</div>
           ${s.municipio?`<div class="sc">📍 ${s.municipio}</div>`:''}
         </div>`;
@@ -1365,7 +1362,7 @@ function renderMes(){
     const date=new Date(ano,mes,d),dstr=ds(date),util=isUtil(date);
     const vis=(roteiro[dstr]||[]).filter(s=>s.tipo==='visita'||s.tipo==='agendamento');
     const cls='mes-cel'+(util?'':' nao-util-m')+(dstr===hoje?' hoje-m':'');
-    let chips=vis.slice(0,2).map(s=>`<div class="mchip ${s.tipo==='agendamento'?'ag':s.rep?'rep':''}">${s.nome?s.nome.split(' ')[0]:''}</div>`).join('');
+    let chips=vis.slice(0,2).map(s=>`<div class="mchip ${s.tipo==='agendamento'?'ag':''}">${s.nome?s.nome.split(' ')[0]:''}</div>`).join('');
     if(vis.length>2)chips+=`<div class="mchip">+${vis.length-2}</div>`;
     h+=`<div class="${cls}" onclick="${util?`selecionarDia(new Date('${dstr}T12:00:00'));setView('dia')`:''}">
       <div class="mn">${d}</div>${chips}
@@ -1443,7 +1440,7 @@ function renderResumo(){
         <div class="res-item"><span class="ri-label">Dias com roteiro</span><span class="ri-val">${diasMes.length}</span></div>
         <div class="res-item"><span class="ri-label">Clientes distintos</span><span class="ri-val">${Object.keys(porCli).length}</span></div>
         <div class="res-item"><span class="ri-label">Média visitas/dia</span><span class="ri-val">${diasMes.length?(tv/diasMes.length).toFixed(1):'—'}</span></div>
-        <div class="res-item"><span class="ri-label">Revisitas planejadas</span><span class="ri-val" style="color:var(--roxo)">${trep}</span></div>
+        <div class="res-item"><span class="ri-label">Visitas por cliente</span><span class="ri-val">${Object.keys(porCli).length?(tv/Object.keys(porCli).length).toFixed(1):'—'}</span></div>
       </div>
     </div>
     <div class="res-card">
@@ -1474,7 +1471,6 @@ function renderResumo(){
       <div class="dr-data">${nomeD}</div>
       <div class="dr-chips">
         <span class="dr-chip">${vis.length} visitas</span>
-        ${reps?`<span class="dr-chip roxo">↩ ${reps} revisita${reps>1?'s':''}</span>`:''}
         <span class="dr-chip verde">~${km}km</span>
         ${cids.map(c=>`<span class="dr-chip">${c}</span>`).join('')}
         ${pros.length?`<span class="dr-chip verde">🌱 prospecção</span>`:''}
@@ -1526,9 +1522,9 @@ function renderMapa(){
   // Marcadores de visita com número sequencial
   visitas.forEach((s,i)=>{
     const cor=COR[s.classificacao]||'#2B2FA8';
-    const bg=s.rep?'#7c3aed':cor;
+    const bg=cor;
     const icon=L.divIcon({html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
-    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b>${s.rep?' ↩':''}<br>📍 ${s.municipio||''}<br>Ordem: ${i+1}º${s.fatMes!=null?`<br>💰 ${fmtBRL(s.fatMes)}/mês<br>📦 ${(+s.mixMedio||0).toLocaleString('pt-BR',{maximumFractionDigits:1})} SKUs/pedido`:''}`).addTo(mapaInst);
+    const mk=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${s.nome}</b><br>📍 ${s.municipio||''}<br>Ordem: ${i+1}º${s.fatMes!=null?`<br>💰 ${fmtBRL(s.fatMes)}/mês<br>📦 ${fmtMix(s.mixMedio)} mix médio`:''}`).addTo(mapaInst);
     _ml.push(mk);bounds.push([s.lat,s.lon]);
   });
 
