@@ -748,7 +748,7 @@ function gerarRoteiro(forceAll=false){
   // 5–8 clientes/dia; grupo pequeno/sobra é completado pelo GRUPO DA CASA (raio).
   const HOME_RADIUS=12; // km — raio do grupo da casa (≈ dist. casa→Restinga); padrão p/ todos
   const GAP_CIDADE=13;  // vão angular (graus) entre cidades vizinhas que separa grupos grossos
-  const AMPL_MAX=15;    // amplitude angular (graus) máx. de um grupo; acima disso, corta por ÂNGULO
+  const AMPL_MAX=10;    // amplitude angular (graus) máx. de um grupo; acima disso, corta por ÂNGULO
   const _idc=c=>c.cod_cliente+'_'+c.loja;
   const _distH=c=>haversine(homeLat,homeLon,+c.latitude,+c.longitude);
 
