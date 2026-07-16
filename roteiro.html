@@ -495,7 +495,12 @@ function m2h(m){return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60
 function h2m(s){const[h,m]=s.split(':').map(Number);return h*60+(m||0);}
 function haversine(la1,lo1,la2,lo2){const R=6371,d1=(la2-la1)*Math.PI/180,d2=(lo2-lo1)*Math.PI/180;const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function distKm(a,b){if(!a||!b)return 0;return haversine(+(a.latitude||a.lat),+(a.longitude||a.lon),+(b.latitude||b.lat),+(b.longitude||b.lon));}
-function travelMin(a,b){return Math.round(distKm(a,b)/CFG.velKmH*60)+CFG.parking;}
+// Velocidade REAL por faixa de distância — calibrada com 9.620 viagens do Google
+// (jan–jul/2026, planilha VISITAS SETORES): a cidade é lenta, a estrada é rápida.
+// Antes o motor usava 35 km/h fixo, que achava os trajetos curtos mais rápidos do que são.
+function velReal(km){return km<5?22.7:km<15?38.2:km<40?57.5:68.6;}
+function tempoTraj(la1,lo1,la2,lo2){const km=haversine(la1,lo1,la2,lo2);return km/velReal(km)*60;}
+function travelMin(a,b){const km=distKm(a,b);return Math.round(km/velReal(km)*60)+CFG.parking;}
 // Média mensal de faturamento (12m, só nota faturada) e mix médio por pedido.
 // Fallback para os campos antigos enquanto um clientes.js velho estiver em cache.
 function fatMes(c){return c.fat_medio_mes!=null?+c.fat_medio_mes:(+c.fat_12m||0)/12;}
@@ -645,6 +650,8 @@ function gerarRoteiro(forceAll=false){
   const pool=CLIENTES.filter(c=>{
     const lat=+c.latitude,lon=+c.longitude;
     if(isNaN(lat)||isNaN(lon)||Math.abs(lat)<0.01||Math.abs(lon)<0.01) return false;
+    // GPS fora do Brasil = cadastro inválido (ex.: sentinela -99,99999 de "sem coordenada").
+    if(lat<-34||lat>6||lon<-74||lon>-34) return false;
     const id=c.cod_cliente+'_'+c.loja;
     if(_visto.has(id)) return false;
     _visto.add(id); return true;
@@ -1081,7 +1088,23 @@ function gerarRoteiro(forceAll=false){
       seqCid.forEach(m=>{const s=nnCity(porCidDia[m],cLat,cLon);ordenados.push(...s);if(s.length){cLat=+s[s.length-1].latitude;cLon=+s[s.length-1].longitude;}});
     }else{
       // REGRA 2: mais LONGE primeiro, voltando ao mais PERTO (ref. casa do vendedor).
-      ordenados=[...clientes].sort((a,z)=>_distH(z)-_distH(a));
+      // Esqueleto = longe→perto (regra mantida). O MIOLO é reencadeado por MENOR TEMPO
+      // real de trajeto (2-opt), sem mover a 1ª parada (mais longe) nem a última (mais perto).
+      const base=[...clientes].sort((a,z)=>_distH(z)-_distH(a));
+      const n=base.length;
+      if(n<4){ ordenados=base; }
+      else{
+        const T=(a,b)=>tempoTraj(+a.latitude,+a.longitude,+b.latitude,+b.longitude);
+        const custo=arr=>{let t=0;for(let i=0;i<arr.length-1;i++)t+=T(arr[i],arr[i+1]);return t;};
+        let r=base, c0=custo(base), melhora=true, guard=0;
+        while(melhora&&guard++<50){ melhora=false;
+          for(let i=1;i<n-2;i++)for(let j=i+1;j<n-1;j++){
+            const nr=r.slice(0,i).concat(r.slice(i,j+1).reverse(),r.slice(j+1)), nc=custo(nr);
+            if(nc+1e-6<c0){ r=nr; c0=nc; melhora=true; }
+          }
+        }
+        ordenados=r;
+      }
     }
 
     // Slots com horários
