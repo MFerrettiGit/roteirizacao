@@ -845,30 +845,35 @@ function gerarRoteiro(forceAll=false){
     }
   });
 
-  // 2) Divide um grupo em dias de MIN..MAX; sobra <MIN é completada com o grupo da casa
-  const casaPool=grupoCasa.filter(_livre);
-  let casaPtr=0;
-  const puxarCasa=n=>{const r=[];for(let k=0;k<n&&casaPool.length;k++){r.push(casaPool[casaPtr++%casaPool.length]);}return r;};
+  // 2) DIMENSIONAMENTO POR TEMPO (regra do gestor, 2026-07-16) — substitui o antigo
+  //    "5 a 8 clientes por dia". Não há mais mínimo nem máximo de clientes: o dia enche
+  //    enquanto couber na JORNADA útil, contando IDA da casa ao grupo, ATENDIMENTO REAL
+  //    de cada cliente (tempos-cliente.js), trajetos internos e VOLTA para casa.
+  //    Um dia pode ter 2 clientes (grupo longe) ou muitos (grupo perto) — tudo bem.
+  const JORNADA=(CFG.horaFim-CFG.horaIni)-60; // 528 min = 8:00→17:48 menos 1h de almoço
   const conflitos=[];
-  function diasDoGrupo(clientes,nome,ehCasa){
-    const dias=[];
-    if(!clientes.length) return dias;
-    // BANDAS RADIAIS: ordena por distância de casa (longe→perto) e fatia em dias;
-    // assim os clientes mais distantes viram um dia e os mais próximos, outro.
-    const ordenados=[...clientes].sort((a,z)=>_distH(z)-_distH(a));
-    const parts=Math.max(1,Math.ceil(ordenados.length/MAX));
-    const sz=Math.ceil(ordenados.length/parts);
-    for(let i=0;i<ordenados.length;i+=sz){
-      let bloco=ordenados.slice(i,i+sz);
-      if(bloco.length<MIN&&!ehCasa){
-        const fill=puxarCasa(MIN-bloco.length);
-        const distMedia=bloco.reduce((s,c)=>s+_distH(c),0)/bloco.length;
-        if(fill.length&&distMedia>HOME_RADIUS+8)
-          conflitos.push({grupo:nome,distKm:Math.round(distMedia),completados:fill.length,cidades:[...new Set(bloco.map(c=>c.municipio))].join('+')});
-        bloco=bloco.concat(fill);
-      }
-      dias.push(bloco);
+  const _dur=c=>duracaoCliente(c); // atendimento real do cliente (min)
+  // Tempo total de um dia para uma lista de clientes, na rota real longe→perto:
+  // ida ao mais distante + Σ(atendimento + trajeto interno) + volta do mais próximo.
+  function tempoDia(cls){
+    if(!cls.length) return 0;
+    const o=[...cls].sort((a,z)=>_distH(z)-_distH(a));
+    let t=tempoTraj(homeLat,homeLon,+o[0].latitude,+o[0].longitude);
+    for(let i=0;i<o.length;i++){ t+=_dur(o[i]);
+      if(i<o.length-1) t+=tempoTraj(+o[i].latitude,+o[i].longitude,+o[i+1].latitude,+o[i+1].longitude); }
+    t+=tempoTraj(+o[o.length-1].latitude,+o[o.length-1].longitude,homeLat,homeLon);
+    return t;
+  }
+  // Fatia um grupo (ou o grupo casa) em DIAS que cabem na jornada, longe→perto.
+  function diasDoGrupo(clientes){
+    const dias=[]; if(!clientes.length) return dias;
+    const ord=[...clientes].sort((a,z)=>_distH(z)-_distH(a));
+    let atual=[];
+    for(const c of ord){
+      if(atual.length && tempoDia(atual.concat(c))>JORNADA){ dias.push(atual); atual=[]; }
+      atual.push(c); // sempre entra ao menos 1 (mesmo que sozinho estoure a jornada)
     }
+    if(atual.length) dias.push(atual);
     return dias;
   }
 
@@ -881,8 +886,8 @@ function gerarRoteiro(forceAll=false){
   const _naoVisitado=c=>!jaVisitados.has(_idc(c));
   const _planejavel=c=>_naoVisitado(c)&&_livre(c);
   const c1Remoto=[]; // {clientes, gi} — dias de 1ª visita dos grupos remotos
-  gruposAng.forEach((g,gi)=>{diasDoGrupo(g.filter(_planejavel),'G'+(gi+1),false).forEach(d=>c1Remoto.push({clientes:d,gi}));});
-  const c1Casa=diasDoGrupo(grupoCasa.filter(_planejavel),'CASA',true);
+  gruposAng.forEach((g,gi)=>{diasDoGrupo(g.filter(_planejavel)).forEach(d=>c1Remoto.push({clientes:d,gi}));});
+  const c1Casa=diasDoGrupo(grupoCasa.filter(_planejavel));
 
   // 4) Distribuição CRONOLÓGICA. REGRA 1: sexta=casa; demais=remotos. Em cada trilha:
   //    1ª visita (C1) primeiro, depois REVISITAS por importância. REGRA NOVA: o mesmo
@@ -911,32 +916,21 @@ function gerarRoteiro(forceAll=false){
     return !!v&&v.some(u=>Math.abs(hoje-u)<j*86400000);
   };
   const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)_addVis(_idc(c),hoje);});
-  // Vagas do dia: o agendamento já ocupa lugar na agenda, então desconta do 5–8.
-  const _nAg=dia=>(agPorDia[dia.data]||[]).length;
-  // completa um bloco até o mínimo com clientes do grupo (por importância) e depois casa, sem repetir <7d
-  // REGRA DO GESTOR: o dia PRECISA fechar o mínimo de visitas. Se com a trava de 7 dias
-  // não houver clientes livres suficientes, a trava vai cedendo — 6, 5, 4… — até a rota
-  // formar. Carteiras pequenas (ex.: Atibaia, 11 clientes no grupo casa) não conseguem
-  // encher 5 sextas respeitando os 7 dias; aqui o mínimo por dia vence a trava.
-  function _completa(bloco,poolGrupo,hoje,ehCasa,nAg){
-    const minEf=Math.max(0,MIN-(nAg||0)), maxEf=Math.max(1,MAX-(nAg||0));
+  // Tempo já reservado por AGENDAMENTO(s) no dia (o cliente marcado não entra no bloco,
+  // mas consome jornada — conta o atendimento dele).
+  const _reserva=dia=>(agPorDia[dia.data]||[]).reduce((s,a)=>{const c=cliPorId[a.clienteId];return s+(c?_dur(c):60);},0);
+  // ENCHE O DIA POR TEMPO até o mais próximo de 17:48 (a JORNADA):
+  //   1º completa com o PRÓPRIO grupo (por importância), enquanto couber;
+  //   2º completa com o GRUPO CASA (do mais perto), aproveitando o tempo que sobra.
+  // reserva = tempo já ocupado por agendamento do dia. Respeita a trava de 7 dias.
+  function encheDia(bloco,poolGrupo,hoje,reserva){
     const ids=new Set(bloco.map(_idc));
-    let usada=NAO_REPETIR;
-    for(let jan=NAO_REPETIR;jan>=1&&bloco.length<minEf;jan--){
-      usada=jan;
-      const extra=poolGrupo.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje,jan)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
-      for(const c of extra){if(bloco.length>=minEf)break;bloco.push(c);ids.add(_idc(c));}
-      if(bloco.length<minEf&&!ehCasa){
-        let tent=0;
-        while(bloco.length<minEf&&tent++<casaPool.length*2){
-          const f=puxarCasa(1)[0];
-          if(f&&!_bloq(f,hoje,jan)&&!ids.has(_idc(f))){bloco.push(f);ids.add(_idc(f));}
-        }
-      }
-    }
-    if(usada<NAO_REPETIR&&bloco.length)
-      afrouxadas.push({data:_dstr(hoje),trava:usada+'d',visitas:bloco.length+(nAg||0)});
-    return bloco.slice(0,maxEf);
+    const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA;
+    poolGrupo.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a))
+      .forEach(c=>{ if(cabe(c)){ bloco.push(c); ids.add(_idc(c)); } });
+    grupoCasa.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje)&&_livre(c)).sort((a,z)=>_distH(a)-_distH(z))
+      .forEach(c=>{ if(cabe(c)){ bloco.push(c); ids.add(_idc(c)); } });
+    return bloco;
   }
   const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
 
@@ -964,17 +958,16 @@ function gerarRoteiro(forceAll=false){
     const k=gi==null?c1Remoto.findIndex(t=>!t._usado):c1Remoto.findIndex(t=>!t._usado&&t.gi===gi);
     if(k<0) return null; c1Remoto[k]._usado=true; return c1Remoto[k];
   };
-  // grupo com menos dias no mês (entre os que têm ≥MIN clientes livres)
+  // grupo com menos dias no mês, entre os que ainda têm ≥1 cliente livre
   const _escolheGrupo=hoje=>{
     let best=-1,bu=Infinity;
-    gruposAng.forEach((g,i)=>{if(_disp(g,hoje).length>=MIN&&usos[i]<bu){bu=usos[i];best=i;}});
-    if(best<0){let bn=-1;gruposAng.forEach((g,i)=>{const n=_disp(g,hoje).length;if(n>bn){bn=n;best=i;}});}
+    gruposAng.forEach((g,i)=>{if(_disp(g,hoje).length>=1&&usos[i]<bu){bu=usos[i];best=i;}});
     return best;
   };
-  const _blocoCasa=(hoje,maxEf,nAg,ci)=>{
+  const _blocoCasa=(hoje,ci)=>{
     const t=ci();
-    return t?_completa(t.filter(c=>!_bloq(c,hoje)),grupoCasa,hoje,true,nAg)
-            :_completa(_disp(grupoCasa,hoje).slice(0,maxEf),grupoCasa,hoje,true,nAg);
+    const base=t?t.filter(c=>!_bloq(c,hoje)):[];
+    return encheDia(base,grupoCasa,hoje,0);
   };
   let ciCasa=0;
   const _proxC1Casa=()=>ciCasa<c1Casa.length?c1Casa[ciCasa++]:null;
@@ -982,57 +975,52 @@ function gerarRoteiro(forceAll=false){
   const _fracDia=hora=>{const m=h2m(hora||'12:00');return Math.max(0,Math.min(1,(m-CFG.horaIni)/(CFG.horaFim-CFG.horaIni)));};
   const _cron=(a,b)=>_dnum(a.data)-_dnum(b.data);
 
-  // Dia REMOTO comum: 1ª visita (C1) enquanto houver; depois revisita do grupo com menos dias
+  // Dia REMOTO comum: 1ª visita (C1) enquanto houver; depois revisita do grupo com menos dias.
   function _montaRemoto(dia){
-    const hoje=_dnum(dia.data);const nAg=_nAg(dia);const maxEf=Math.max(1,MAX-nAg);
-    let bloco=null;
+    const hoje=_dnum(dia.data);let bloco=null;
     const t=_pegaC1(null);
-    if(t){bloco=_completa(t.clientes.filter(c=>!_bloq(c,hoje)),gruposAng[t.gi],hoje,false,nAg);usos[t.gi]++;}
+    if(t){bloco=encheDia(t.clientes.filter(c=>!_bloq(c,hoje)),gruposAng[t.gi],hoje,0);usos[t.gi]++;}
     else if(gruposAng.length){
       const gi=_escolheGrupo(hoje);
-      if(gi>=0){bloco=_completa(_disp(gruposAng[gi],hoje).slice(0,maxEf),gruposAng[gi],hoje,false,nAg);usos[gi]++;}
+      if(gi>=0){const d=diasDoGrupo(_disp(gruposAng[gi],hoje))[0]||[];bloco=encheDia(d,gruposAng[gi],hoje,0);usos[gi]++;}
     }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   }
   // Dia de CASA comum (sextas)
   function _montaCasa(dia){
-    dia._casa=true;const hoje=_dnum(dia.data);const nAg=_nAg(dia);const maxEf=Math.max(1,MAX-nAg);
-    const bloco=_blocoCasa(hoje,maxEf,nAg,_proxC1Casa);
+    dia._casa=true;const hoje=_dnum(dia.data);
+    const bloco=_blocoCasa(hoje,_proxC1Casa);
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   }
   // Dia com AGENDAMENTO — montado ANTES dos demais: o dia marcado tem prioridade e o
   // resto do mês se ajusta a ele (senão a trava de 7 dias já teria levado os vizinhos
   // do cliente agendado para outro dia, e a viagem sairia para um cliente só).
   function _montaForcado(dia){
-    const hoje=_dnum(dia.data);const nAg=_nAg(dia);const maxEf=Math.max(1,MAX-nAg);
+    const hoje=_dnum(dia.data);const reserva=_reserva(dia);
     const f=forcado[dia.data];let bloco;
     if(f.g==='casa'){ // agendado é do grupo casa → o dia vira dia de casa
       dia._casa=true;
-      bloco=_blocoCasa(hoje,maxEf,nAg,_proxC1Casa);
+      const t=_proxC1Casa();const base=t?t.filter(c=>!_bloq(c,hoje)):[];
+      bloco=encheDia(base,grupoCasa,hoje,reserva);
     }else if(!dia.isSexta){
       // o dia passa a ser do GRUPO do cliente agendado (regra do gestor)
       const t=_pegaC1(f.g);
-      bloco=t?_completa(t.clientes.filter(c=>!_bloq(c,hoje)),gruposAng[f.g],hoje,false,nAg)
-             :_completa(_disp(gruposAng[f.g],hoje).slice(0,maxEf),gruposAng[f.g],hoje,false,nAg);
+      const base=t?t.clientes.filter(c=>!_bloq(c,hoje)):(diasDoGrupo(_disp(gruposAng[f.g],hoje))[0]||[]);
+      bloco=encheDia(base,gruposAng[f.g],hoje,reserva);usos[f.g]++;
     }else{
-      // sexta com agendamento REMOTO → dia misto
+      // sexta com agendamento REMOTO → dia misto: parte da jornada (pela hora do
+      // agendamento) na região do agendado, resto completado com o grupo casa.
       const ag=agPorDia[dia.data][0];
       const cliAg=cliPorId[ag.clienteId];
       const munAg=cliAg?(cliAg._mun||cliAg.municipio):null;
-      // aproveita a viagem: primeiro a cidade do agendado, depois o resto do grupo dele
-      // (Guaíra → Ipuã/Guará), do mais perto da cidade agendada para o mais longe
-      const _pertoDoAg=(a,z)=>haversine(+cliAg.latitude,+cliAg.longitude,+a.latitude,+a.longitude)
-                             -haversine(+cliAg.latitude,+cliAg.longitude,+z.latitude,+z.longitude);
-      const naCidade=_disp(gruposAng[f.g].filter(c=>(c._mun||c.municipio)===munAg),hoje);
-      const noGrupo =_disp(gruposAng[f.g].filter(c=>(c._mun||c.municipio)!==munAg),hoje).sort(_pertoDoAg);
-      // cedo → mais clientes da região do agendado; tarde → mais grupo casa
-      const vagasCid=Math.max(0,Math.round((1-_fracDia(ag.hora))*(maxEf-1)));
-      const bCid=naCidade.concat(noGrupo).slice(0,vagasCid);
-      const bCasa=_disp(grupoCasa,hoje).slice(0,Math.max(0,maxEf-bCid.length));
-      bloco=bCid.concat(bCasa);
-      dia._mistoCidade=munAg; dia._mistoN=bCid.length;
-      conflitos.push({tipo:'sexta com agendamento fora do grupo casa',data:dia.data,
-        cidade:munAg,hora:ag.hora,daCidade:bCid.length,doGrupoCasa:bCasa.length});
+      const frac=1-_fracDia(ag.hora); // cedo→+região do agendado; tarde→+grupo casa
+      const limReg=JORNADA*frac;
+      const reg=_disp(gruposAng[f.g],hoje).sort((a,z)=>_distH(z)-_distH(a));
+      bloco=[];
+      reg.forEach(c=>{ if(tempoDia(bloco.concat(c))+reserva<=Math.min(JORNADA,limReg)){bloco.push(c);} });
+      bloco=encheDia(bloco,grupoCasa,hoje,reserva);
+      dia._mistoCidade=munAg;
+      conflitos.push({tipo:'sexta com agendamento fora do grupo casa',data:dia.data,cidade:munAg,hora:ag.hora});
     }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   }
