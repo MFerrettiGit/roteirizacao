@@ -921,15 +921,36 @@ function gerarRoteiro(forceAll=false){
   const _reserva=dia=>(agPorDia[dia.data]||[]).reduce((s,a)=>{const c=cliPorId[a.clienteId];return s+(c?_dur(c):60);},0);
   // ENCHE O DIA POR TEMPO até o mais próximo de 17:48 (a JORNADA):
   //   1º completa com o PRÓPRIO grupo (por importância), enquanto couber;
-  //   2º completa com o GRUPO CASA (do mais perto), aproveitando o tempo que sobra.
-  // reserva = tempo já ocupado por agendamento do dia. Respeita a trava de 7 dias.
+  //   2º completa com o GRUPO CASA (do mais perto), aproveitando o tempo que sobra;
+  //   3º se AINDA sobra tempo e não há mais cliente livre (todos travados pelos 7 dias),
+  //      a trava CEDE — 6, 5, 4… dias — completando com o grupo casa até aproximar as
+  //      17:48. Como só adiciona se o cliente cabe no tempo, o afrouxamento só age nos
+  //      dias realmente ociosos (senão o tempo já estaria cheio). Regra do gestor.
+  // reserva = tempo já ocupado por agendamento do dia.
   function encheDia(bloco,poolGrupo,hoje,reserva){
     const ids=new Set(bloco.map(_idc));
     const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA;
-    poolGrupo.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a))
-      .forEach(c=>{ if(cabe(c)){ bloco.push(c); ids.add(_idc(c)); } });
-    grupoCasa.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje)&&_livre(c)).sort((a,z)=>_distH(a)-_distH(z))
-      .forEach(c=>{ if(cabe(c)){ bloco.push(c); ids.add(_idc(c)); } });
+    const add=lista=>lista.forEach(c=>{ if(!ids.has(_idc(c))&&_livre(c)&&cabe(c)){bloco.push(c);ids.add(_idc(c));} });
+    // 1-2) trava cheia (7 dias)
+    add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
+    add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_distH(a)-_distH(z)));
+    // 3) afrouxa a trava SÓ se o dia ficou OCIOSO (sobra > FOLGA_OCIOSO) e sem livres.
+    //    Cede no máximo até AFROUXA_PISO dias (nunca repete cliente cedo demais) e para
+    //    assim que o dia sai da ociosidade — evita inflar revisita nos dias já cheios.
+    const FOLGA_OCIOSO=120; // só completa dias que terminariam antes de ~15:48 (>2h vazias)
+    const AFROUXA_PISO=4;   // nunca revisita com menos de 4 dias
+    let usada=NAO_REPETIR;
+    const folga=()=>JORNADA-tempoDia(bloco)-(reserva||0);
+    if(folga()>FOLGA_OCIOSO){
+      for(let jan=NAO_REPETIR-1; jan>=AFROUXA_PISO; jan--){
+        const antes=bloco.length;
+        add(grupoCasa.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_distH(a)-_distH(z)));
+        add(poolGrupo.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_imp(z)-_imp(a)));
+        if(bloco.length>antes) usada=jan;
+        if(folga()<=FOLGA_OCIOSO) break;
+      }
+    }
+    if(usada<NAO_REPETIR) afrouxadas.push({data:_dstr(hoje),trava:usada+'d',visitas:bloco.length});
     return bloco;
   }
   const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
