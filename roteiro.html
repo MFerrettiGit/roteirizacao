@@ -850,7 +850,8 @@ function gerarRoteiro(forceAll=false){
   //    enquanto couber na JORNADA útil, contando IDA da casa ao grupo, ATENDIMENTO REAL
   //    de cada cliente (tempos-cliente.js), trajetos internos e VOLTA para casa.
   //    Um dia pode ter 2 clientes (grupo longe) ou muitos (grupo perto) — tudo bem.
-  const JORNADA=(CFG.horaFim-CFG.horaIni)-60; // 528 min = 8:00→17:48 menos 1h de almoço
+  const JORNADA=(CFG.horaFim-CFG.horaIni)-60;      // 528 min = 8:00→17:48 menos 1h almoço (TETO)
+  const MIN_JORNADA=(16*60+30-CFG.horaIni)-60;     // 450 min = término mínimo 16:30 (PISO)
   const conflitos=[];
   const _dur=c=>duracaoCliente(c); // atendimento real do cliente (min)
   // Tempo total de um dia para uma lista de clientes, na rota real longe→perto:
@@ -929,26 +930,24 @@ function gerarRoteiro(forceAll=false){
   // reserva = tempo já ocupado por agendamento do dia.
   function encheDia(bloco,poolGrupo,hoje,reserva){
     const ids=new Set(bloco.map(_idc));
-    const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA;
-    const add=lista=>lista.forEach(c=>{ if(!ids.has(_idc(c))&&_livre(c)&&cabe(c)){bloco.push(c);ids.add(_idc(c));} });
-    // 1-2) trava cheia (7 dias)
+    const usado=()=>tempoDia(bloco)+(reserva||0);
+    const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA; // TETO 17:48
+    // adiciona da lista respeitando o teto; se 'ate' informado, para ao cruzá-lo
+    const add=(lista,ate)=>{ for(const c of lista){ if(ate!=null&&usado()>=ate)break;
+      if(!ids.has(_idc(c))&&_livre(c)&&cabe(c)){bloco.push(c);ids.add(_idc(c));} } };
+    // 1-2) trava cheia (7 dias): próprio grupo (importância) + grupo casa (perto), até 17:48
     add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
     add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_distH(a)-_distH(z)));
-    // 3) afrouxa a trava SÓ se o dia ficou OCIOSO (sobra > FOLGA_OCIOSO) e sem livres.
-    //    Cede no máximo até AFROUXA_PISO dias (nunca repete cliente cedo demais) e para
-    //    assim que o dia sai da ociosidade — evita inflar revisita nos dias já cheios.
-    const FOLGA_OCIOSO=120; // só completa dias que terminariam antes de ~15:48 (>2h vazias)
-    const AFROUXA_PISO=4;   // nunca revisita com menos de 4 dias
+    // 3) PISO 16:30: o dia NÃO pode terminar antes das 16:30. Se com os clientes livres
+    //    não chegou lá, a trava CEDE (6,5,4…) e completa — parando assim que CRUZA as
+    //    16:30 (não vai até 17:48), o que segura as revisitas ao mínimo necessário.
+    //    Grupo casa primeiro (perto). O teto de 17:48 continua valendo via cabe().
     let usada=NAO_REPETIR;
-    const folga=()=>JORNADA-tempoDia(bloco)-(reserva||0);
-    if(folga()>FOLGA_OCIOSO){
-      for(let jan=NAO_REPETIR-1; jan>=AFROUXA_PISO; jan--){
-        const antes=bloco.length;
-        add(grupoCasa.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_distH(a)-_distH(z)));
-        add(poolGrupo.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_imp(z)-_imp(a)));
-        if(bloco.length>antes) usada=jan;
-        if(folga()<=FOLGA_OCIOSO) break;
-      }
+    for(let jan=NAO_REPETIR-1; jan>=1 && usado()<MIN_JORNADA; jan--){
+      const antes=bloco.length;
+      add(grupoCasa.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_distH(a)-_distH(z)), MIN_JORNADA);
+      if(usado()<MIN_JORNADA) add(poolGrupo.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_imp(z)-_imp(a)), MIN_JORNADA);
+      if(bloco.length>antes) usada=jan;
     }
     if(usada<NAO_REPETIR) afrouxadas.push({data:_dstr(hoje),trava:usada+'d',visitas:bloco.length});
     return bloco;
