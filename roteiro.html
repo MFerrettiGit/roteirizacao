@@ -748,7 +748,7 @@ function gerarRoteiro(forceAll=false){
   // 5–8 clientes/dia; grupo pequeno/sobra é completado pelo GRUPO DA CASA (raio).
   const HOME_RADIUS=12; // km — raio do grupo da casa (≈ dist. casa→Restinga); padrão p/ todos
   const GAP_CIDADE=13;  // vão angular (graus) entre cidades vizinhas que separa grupos grossos
-  const DIAM_LIMIT=35;  // km — se o grupo abre demais no chão, corta pela LINHA CENTRAL
+  const AMPL_MAX=15;    // amplitude angular (graus) máx. de um grupo; acima disso, corta por ÂNGULO
   const _idc=c=>c.cod_cliente+'_'+c.loja;
   const _distH=c=>haversine(homeLat,homeLon,+c.latitude,+c.longitude);
 
@@ -760,9 +760,12 @@ function gerarRoteiro(forceAll=false){
   const grupoCasa=todosCli.filter(c=>_distH(c)<=HOME_RADIUS);
   const remotos  =todosCli.filter(c=>_distH(c)> HOME_RADIUS);
 
-  // 1) Grupos: (a) ÂNGULO em nível de CIDADE (cidade nunca dividida); (b) se o grupo
-  //    abre demais no chão (diâmetro>DIAM_LIMIT), corta pela LINHA CENTRAL (2-means);
-  //    (c) cidade que sobraria isolada anexa ao sub-grupo mais próximo.
+  // 1) Grupos: (a) ÂNGULO em nível de CIDADE (cidade nunca dividida); (b) se a fatia abre
+  //    demais no ângulo (amplitude>AMPL_MAX), corta POR ÂNGULO no maior vão interno;
+  //    (c) cidade que sobraria isolada anexa à fatia angular VIZINHA.
+  // 2026-07-16: a "linha central" (2-means por distância) foi trocada por corte ANGULAR.
+  //    Ela cortava por distância e criava anéis concêntricos na MESMA direção (um grupo
+  //    "perto" e outro "longe" sobrepostos, ex.: Ribeirão G8/G9). O gestor aprovou.
   const porCidade={};
   remotos.forEach(c=>{(porCidade[c.municipio]=porCidade[c.municipio]||[]).push(c);});
   const cidades=Object.entries(porCidade).map(([m,cls])=>{
@@ -771,27 +774,18 @@ function gerarRoteiro(forceAll=false){
     return {m,cls,la,lo,b:bearingDeg(homeLat,homeLon,la,lo)};
   }).sort((a,z)=>a.b-z.b);
 
-  const _diamCid=arr=>{let m=0;for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){const d=haversine(arr[i].la,arr[i].lo,arr[j].la,arr[j].lo);if(d>m)m=d;}return m;};
-  const _cenCli=arr=>{const a=arr.flatMap(c=>c.cls);return [a.reduce((s,c)=>s+(+c.latitude),0)/a.length,a.reduce((s,c)=>s+(+c.longitude),0)/a.length];};
-  // LINHA CENTRAL = 2-means (semente = par de cidades mais distante) → 2 sub-grupos
-  function _bisect(arr){
-    let a=0,b=1,md=-1;
-    for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){const d=haversine(arr[i].la,arr[i].lo,arr[j].la,arr[j].lo);if(d>md){md=d;a=i;b=j;}}
-    let cA=[arr[a].la,arr[a].lo],cB=[arr[b].la,arr[b].lo],A=[],B=[];
-    for(let it=0;it<12;it++){
-      A=[];B=[];
-      arr.forEach(c=>{(haversine(c.la,c.lo,cA[0],cA[1])<=haversine(c.la,c.lo,cB[0],cB[1])?A:B).push(c);});
-      if(!A.length||!B.length) return [arr];
-      cA=[A.reduce((s,c)=>s+c.la,0)/A.length,A.reduce((s,c)=>s+c.lo,0)/A.length];
-      cB=[B.reduce((s,c)=>s+c.la,0)/B.length,B.reduce((s,c)=>s+c.lo,0)/B.length];
-    }
-    return [A,B];
-  }
+  // Amplitude angular da fatia (as cidades já vêm ordenadas por rumo, sem cruzar 0°/360°
+  // porque o círculo foi cortado no maior vão). Rumo médio p/ escolher a fatia vizinha.
+  const _amplCid=arr=>arr.length<2?0:arr[arr.length-1].b-arr[0].b;
+  const _rumoMed=arr=>arr.reduce((s,c)=>s+c.b,0)/arr.length;
+  // SUBDIVISÃO ANGULAR: fatia com amplitude > AMPL_MAX é cortada no MAIOR VÃO interno
+  // entre cidades vizinhas, recursivamente, até cada fatia caber em AMPL_MAX.
+  // (Antes cortava por distância — 2-means — e gerava anéis na mesma direção.)
   function _subdividir(arr){
-    if(arr.length<2||_diamCid(arr)<=DIAM_LIMIT) return [arr];
-    const p=_bisect(arr);
-    if(p.length<2) return [arr];
-    return _subdividir(p[0]).concat(_subdividir(p[1]));
+    if(arr.length<2||_amplCid(arr)<=AMPL_MAX) return [arr];
+    let bi=1,bg=-1;
+    for(let i=1;i<arr.length;i++){const g=arr[i].b-arr[i-1].b;if(g>bg){bg=g;bi=i;}}
+    return _subdividir(arr.slice(0,bi)).concat(_subdividir(arr.slice(bi)));
   }
   const gruposAng=[]; // cada grupo = array de CLIENTES
   if(cidades.length){
@@ -813,8 +807,9 @@ function gerarRoteiro(forceAll=false){
         for(let i=0;i<subs.length;i++){
           const nCli=subs[i].reduce((s,c)=>s+c.cls.length,0);
           if(nCli>=MIN) continue;
-          const ci=_cenCli(subs[i]);let bj=-1,bd=Infinity;
-          for(let j=0;j<subs.length;j++){if(j===i)continue;const cj=_cenCli(subs[j]);const d=haversine(ci[0],ci[1],cj[0],cj[1]);if(d<bd){bd=d;bj=j;}}
+          // anexa à fatia ANGULAR mais próxima (por rumo), não à geograficamente próxima
+          const ri=_rumoMed(subs[i]);let bj=-1,bd=Infinity;
+          for(let j=0;j<subs.length;j++){if(j===i)continue;const d=Math.abs(_rumoMed(subs[j])-ri);if(d<bd){bd=d;bj=j;}}
           if(bj>=0){subs[bj]=subs[bj].concat(subs[i]);subs.splice(i,1);mudou=true;break;}
         }
       }
