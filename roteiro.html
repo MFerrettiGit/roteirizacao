@@ -423,6 +423,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 <script src="dados/clientes.js"></script>
 <script src="dados/vendedores.js"></script>
 <script src="dados/produtos-cliente.js"></script>
+<script src="dados/tempos-cliente.js"></script>
 <script>
 // ── CONFIG ──────────────────────────────────────────────────
 const CFG = {
@@ -509,8 +510,12 @@ function fmtBRL(v){return 'R$ '+Math.round(v||0).toLocaleString('pt-BR');}
 function fmtMix(v){return (+v||0).toLocaleString('pt-BR',{maximumFractionDigits:1});}
 
 function duracaoCliente(c){
-  // Duração baseada no perfil individual do cliente, não na curva A/B/C.
-  // Quanto este cliente específico merece de atenção?
+  // 1º: MÉDIA REAL INDIVIDUAL do cliente (das visitas de jan–jul, em tempos-cliente.js).
+  // É o tempo que ESTE cliente costuma levar — não uma curva por classe A/B/C.
+  const real=window.TEMPO_CLIENTE&&window.TEMPO_CLIENTE[c.cod_cliente+'_'+c.loja];
+  if(real!=null) return Math.round(+real);
+
+  // Fallback (cliente sem histórico de visita): estimativa pelo perfil de compra.
   const fatM=fatMes(c);
   const mix=mixMedio(c);
   const dias=diasSemPedido(c);
