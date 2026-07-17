@@ -920,45 +920,28 @@ function gerarRoteiro(forceAll=false){
     const j=(jan==null?NAO_REPETIR:jan);
     return !!v&&v.some(u=>Math.abs(hoje-u)<j*86400000);
   };
+  // TETO de 4 visitas/mês por cliente (≈1 por semana). Já com 4, não recebe mais.
+  const MAX_VIS_MES=4;
+  const _podeVisitar=c=>(visitasDe[_idc(c)]||[]).length<MAX_VIS_MES;
   const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)_addVis(_idc(c),hoje);});
   // Tempo já reservado por AGENDAMENTO(s) no dia (o cliente marcado não entra no bloco,
   // mas consome jornada — conta o atendimento dele).
   const _reserva=dia=>(agPorDia[dia.data]||[]).reduce((s,a)=>{const c=cliPorId[a.clienteId];return s+(c?_dur(c):60);},0);
-  // ENCHE O DIA POR TEMPO até o mais próximo de 17:48 (a JORNADA):
-  //   1º completa com o PRÓPRIO grupo (por importância), enquanto couber;
-  //   2º completa com o GRUPO CASA (do mais perto), aproveitando o tempo que sobra;
-  //   3º se AINDA sobra tempo e não há mais cliente livre (todos travados pelos 7 dias),
-  //      a trava CEDE — 6, 5, 4… dias — completando com o grupo casa até aproximar as
-  //      17:48. Como só adiciona se o cliente cabe no tempo, o afrouxamento só age nos
-  //      dias realmente ociosos (senão o tempo já estaria cheio). Regra do gestor.
+  // ENCHE O DIA com VISITAS por importância (venda mensal + mix médio), respeitando a
+  // trava de 7 dias CHEIA e o TETO de 4 visitas/mês por cliente. NÃO afrouxa a trava:
+  // o que faltar para o dia chegar às 16:30 é completado com PROSPECÇÃO (passo 10).
+  // Assim as revisitas são as mínimas (só as legítimas, ≥7 dias) e ninguém passa de 4×/mês.
   // reserva = tempo já ocupado por agendamento do dia.
   function encheDia(bloco,poolGrupo,hoje,reserva){
     const ids=new Set(bloco.map(_idc));
-    const usado=()=>tempoDia(bloco)+(reserva||0);
     const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA; // TETO 17:48
-    // adiciona da lista respeitando o teto; se 'ate' informado, para ao cruzá-lo
-    const add=(lista,ate)=>{ for(const c of lista){ if(ate!=null&&usado()>=ate)break;
-      if(!ids.has(_idc(c))&&_livre(c)&&cabe(c)){bloco.push(c);ids.add(_idc(c));} } };
-    // 1-2) trava cheia (7 dias): próprio grupo (importância) + grupo casa (perto), até 17:48
+    const add=lista=>{ for(const c of lista){
+      if(!ids.has(_idc(c))&&_livre(c)&&_podeVisitar(c)&&cabe(c)){bloco.push(c);ids.add(_idc(c));} } };
     add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
-    add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_distH(a)-_distH(z)));
-    // 3) PISO 16:30: o dia NÃO pode terminar antes das 16:30. Se com os clientes livres
-    //    não chegou lá, a trava CEDE (6,5,4…) e completa — parando assim que CRUZA as
-    //    16:30 (não vai até 17:48), o que segura as revisitas ao mínimo necessário.
-    //    Grupo casa primeiro (perto). O teto de 17:48 continua valendo via cabe().
-    // As revisitas antecipadas são as MENOS possíveis (para ao cruzar 16:30) e focam nos
-    // clientes de MAIOR importância (venda mensal + mix médio) — grupo do dia + casa juntos.
-    let usada=NAO_REPETIR;
-    for(let jan=NAO_REPETIR-1; jan>=1 && usado()<MIN_JORNADA; jan--){
-      const antes=bloco.length;
-      const cand=[...new Set(poolGrupo.concat(grupoCasa))].filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_imp(z)-_imp(a));
-      add(cand, MIN_JORNADA);
-      if(bloco.length>antes) usada=jan;
-    }
-    if(usada<NAO_REPETIR) afrouxadas.push({data:_dstr(hoje),trava:usada+'d',visitas:bloco.length});
+    add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
     return bloco;
   }
-  const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)).sort((a,z)=>_imp(z)-_imp(a));
+  const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort((a,z)=>_imp(z)-_imp(a));
 
   // 4b) AGENDAMENTO DEFINE O GRUPO DO DIA (regra do gestor, 2026-07-15)
   //     O dia em que há visita marcada é refeito com o grupo do cliente agendado.
@@ -994,7 +977,7 @@ function gerarRoteiro(forceAll=false){
   };
   const _blocoCasa=(hoje,ci)=>{
     const t=ci();
-    const base=t?t.filter(c=>!_bloq(c,hoje)):[];
+    const base=t?t.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)):[];
     return encheDia(base,grupoCasa,hoje,0);
   };
   let ciCasa=0;
@@ -1003,25 +986,28 @@ function gerarRoteiro(forceAll=false){
   const _fracDia=hora=>{const m=h2m(hora||'12:00');return Math.max(0,Math.min(1,(m-CFG.horaIni)/(CFG.horaFim-CFG.horaIni)));};
   const _cron=(a,b)=>_dnum(a.data)-_dnum(b.data);
 
+  const _munsDe=grupo=>[...new Set(grupo.map(c=>c._mun||c.municipio))];
   // Dia REMOTO comum: 1ª visita (C1) enquanto houver; depois revisita do grupo com menos dias.
   function _montaRemoto(dia){
-    const hoje=_dnum(dia.data);let bloco=null;
+    const hoje=_dnum(dia.data);let bloco=null,grupo=null;
     const t=_pegaC1(null);
-    if(t){bloco=encheDia(t.clientes.filter(c=>!_bloq(c,hoje)),gruposAng[t.gi],hoje,0);usos[t.gi]++;}
+    if(t){grupo=gruposAng[t.gi];bloco=encheDia(t.clientes.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)),grupo,hoje,0);usos[t.gi]++;}
     else if(gruposAng.length){
       const gi=_escolheGrupo(hoje);
-      if(gi>=0){const d=diasDoGrupo(_disp(gruposAng[gi],hoje))[0]||[];bloco=encheDia(d,gruposAng[gi],hoje,0);usos[gi]++;}
+      if(gi>=0){grupo=gruposAng[gi];const d=diasDoGrupo(_disp(grupo,hoje))[0]||[];bloco=encheDia(d,grupo,hoje,0);usos[gi]++;}
     }
-    // DIA NUNCA VAZIO: se nada foi montado (grupos esgotados/setor só-casa), enche com o
-    // grupo casa, afrouxando a trava se preciso.
-    if(!bloco||!bloco.length){ bloco=encheDia([],grupoCasa,hoje,0); dia._casa=true; }
+    if(!grupo)grupo=grupoCasa;
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
+    // Cidades do grupo → onde prospectar para completar o dia (mesmo sem visita: dia
+    // NUNCA fica vazio, vira dia de prospecção nas cidades carentes daquele grupo).
+    dia._munsProsp=_munsDe(grupo);
   }
   // Dia de CASA comum (sextas)
   function _montaCasa(dia){
     dia._casa=true;const hoje=_dnum(dia.data);
     const bloco=_blocoCasa(hoje,_proxC1Casa);
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
+    dia._munsProsp=_munsDe(grupoCasa);
   }
   // Dia com AGENDAMENTO — montado ANTES dos demais: o dia marcado tem prioridade e o
   // resto do mês se ajusta a ele (senão a trava de 7 dias já teria levado os vizinhos
@@ -1031,12 +1017,12 @@ function gerarRoteiro(forceAll=false){
     const f=forcado[dia.data];let bloco;
     if(f.g==='casa'){ // agendado é do grupo casa → o dia vira dia de casa
       dia._casa=true;
-      const t=_proxC1Casa();const base=t?t.filter(c=>!_bloq(c,hoje)):[];
+      const t=_proxC1Casa();const base=t?t.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)):[];
       bloco=encheDia(base,grupoCasa,hoje,reserva);
     }else if(!dia.isSexta){
       // o dia passa a ser do GRUPO do cliente agendado (regra do gestor)
       const t=_pegaC1(f.g);
-      const base=t?t.clientes.filter(c=>!_bloq(c,hoje)):(diasDoGrupo(_disp(gruposAng[f.g],hoje))[0]||[]);
+      const base=t?t.clientes.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)):(diasDoGrupo(_disp(gruposAng[f.g],hoje))[0]||[]);
       bloco=encheDia(base,gruposAng[f.g],hoje,reserva);usos[f.g]++;
     }else{
       // sexta com agendamento REMOTO → dia misto: parte da jornada (pela hora do
@@ -1054,6 +1040,7 @@ function gerarRoteiro(forceAll=false){
       conflitos.push({tipo:'sexta com agendamento fora do grupo casa',data:dia.data,cidade:munAg,hora:ag.hora});
     }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
+    dia._munsProsp=_munsDe(f.g==='casa'||dia.isSexta?grupoCasa:gruposAng[f.g]);
   }
 
   // ORDEM DE MONTAGEM: 1º os dias com visita marcada (têm prioridade e definem o grupo
@@ -1081,7 +1068,8 @@ function gerarRoteiro(forceAll=false){
 
     // Agendamentos fixos para este dia
     const agsFix=(agPorDia[data]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
-    if(!clientes.length&&!agsFix.length) return;
+    // Dia sem visita mas com cidades de prospecção NÃO é pulado — vira dia de prospecção.
+    if(!clientes.length&&!agsFix.length&&!(diaObj._munsProsp&&diaObj._munsProsp.length)) return;
 
     // NN dentro de cada cidade, mantendo ordem dos blocos
     function nnCity(cls,sLat,sLon){
@@ -1179,33 +1167,26 @@ function gerarRoteiro(forceAll=false){
       if(vi<ordenados.length) slots.push(_slotVis(ordenados[vi++]));
     }
 
-    // ── Prospecção ────────────────────────────────────────────
-    // REGRA: cidade com MENOS DE 5 clientes na carteira (≤ maxClientesSingleton = 4),
-    // a qualquer distância, gera prospecção — no máximo CFG.maxProsp (6) no mês,
-    // 1 por dia. Prioriza cidade ainda não prospectada no mês.
-    // MOMENTO OPORTUNO: "passei pela cidade que tem menos de 5, vou fazer prospecção".
-    // Entra por REGRA (não por sobra de relógio — o tempo por cliente não é real) e
-    // logo APÓS a última visita naquela cidade, aproveitando que o vendedor está lá.
-    if(prosContador<CFG.maxProsp){
-      const mun=[...new Set(clientes.map(c=>c._mun||'?'))]
-        .filter(m=>(porMun[m]||[]).length&&(porMun[m]||[]).length<=CFG.maxClientesSingleton)
-        .filter(m=>!cidProspectadas.has(m))
-        .sort((a,z)=>porMun[a].length-porMun[z].length)[0]; // a cidade mais carente do dia
-      if(mun){
-        let idx=-1;
-        slots.forEach((s,i)=>{if((s.tipo==='visita'||s.tipo==='agendamento')&&s.municipio===mun)idx=i;});
-        if(idx>=0){
-          const clsMun=porMun[mun], n=clsMun.length;
-          const fim=h2m(slots[idx].horaFim);
-          slots.splice(idx+1,0,{tipo:'prospeccao',
-            nome:`Prospecção — ${mun.charAt(0)+mun.slice(1).toLowerCase()}`,
-            horaIni:m2h(fim),horaFim:m2h(fim+CFG.pros),duracao:CFG.pros,
-            classificacao:'',municipio:mun,
-            lat:clsMun.reduce((s,c)=>s+(+c.latitude),0)/n,
-            lon:clsMun.reduce((s,c)=>s+(+c.longitude),0)/n});
-          prosContador++;
-          cidProspectadas.add(mun);
-        }
+    // ── Prospecção COMPLETA o dia até as 16:30 ────────────────
+    // Regra do gestor (2026-07-17): em vez de revisitar demais, o que faltar para o dia
+    // chegar às 16:30 vira PROSPECÇÃO, feita nas cidades do dia com MENOS clientes na
+    // carteira (buscar clientes novos onde a base é rala). Quantas forem necessárias.
+    {
+      const tReal=tempoDia(clientes); // tempo real das visitas (trajeto+atend+ida+volta)
+      const nProsp=Math.max(0,Math.ceil((MIN_JORNADA-tReal)/CFG.pros));
+      // cidades para prospecção: as do dia (se há visita) ou as do grupo (dia sem visita)
+      const munsDia=(clientes.length?[...new Set(clientes.map(c=>c._mun||'?'))]:(diaObj._munsProsp||[]))
+        .filter(m=>porMun[m]&&porMun[m].length)
+        .sort((a,z)=>porMun[a].length-porMun[z].length); // as mais carentes primeiro
+      for(let k=0;k<nProsp&&munsDia.length;k++){
+        const mun=munsDia[k%munsDia.length], clsMun=porMun[mun], n=clsMun.length;
+        slots.push({tipo:'prospeccao',
+          nome:`Prospecção — ${mun.charAt(0)+mun.slice(1).toLowerCase()}`,
+          horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,
+          classificacao:'',municipio:mun,
+          lat:clsMun.reduce((s,c)=>s+(+c.latitude),0)/n,
+          lon:clsMun.reduce((s,c)=>s+(+c.longitude),0)/n});
+        cur+=CFG.pros; prosContador++;
       }
     }
 
