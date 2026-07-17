@@ -880,7 +880,11 @@ function gerarRoteiro(forceAll=false){
 
   // 3) Importância + blocos C1 (1ª visita) por grupo (bandas radiais)
   const _cenB=cls=>[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];
-  const _imp=c=>fatMes(c); // grau de importância = média mensal de faturamento (12m)
+  // IMPORTÂNCIA do cliente = venda mensal + mix médio, cada um normalizado 0..1 (peso
+  // igual) pelo maior do setor. Guia quem é revisitado primeiro: os mais importantes.
+  const _maxFat=Math.max(1,...todosCli.map(fatMes));
+  const _maxMix=Math.max(1,...todosCli.map(mixMedio));
+  const _imp=c=>fatMes(c)/_maxFat + mixMedio(c)/_maxMix;
   // C1 = 1ª visita do mês → só quem AINDA NÃO foi visitado nos dias já realizados.
   // Quem já foi visitado só reaparece na etapa de revisita (senão o mês inteiro
   // seria replanejado como 1ª visita e sairia todo marcado como revisita).
@@ -942,11 +946,13 @@ function gerarRoteiro(forceAll=false){
     //    não chegou lá, a trava CEDE (6,5,4…) e completa — parando assim que CRUZA as
     //    16:30 (não vai até 17:48), o que segura as revisitas ao mínimo necessário.
     //    Grupo casa primeiro (perto). O teto de 17:48 continua valendo via cabe().
+    // As revisitas antecipadas são as MENOS possíveis (para ao cruzar 16:30) e focam nos
+    // clientes de MAIOR importância (venda mensal + mix médio) — grupo do dia + casa juntos.
     let usada=NAO_REPETIR;
     for(let jan=NAO_REPETIR-1; jan>=1 && usado()<MIN_JORNADA; jan--){
       const antes=bloco.length;
-      add(grupoCasa.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_distH(a)-_distH(z)), MIN_JORNADA);
-      if(usado()<MIN_JORNADA) add(poolGrupo.filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_imp(z)-_imp(a)), MIN_JORNADA);
+      const cand=[...new Set(poolGrupo.concat(grupoCasa))].filter(c=>!_bloq(c,hoje,jan)).sort((a,z)=>_imp(z)-_imp(a));
+      add(cand, MIN_JORNADA);
       if(bloco.length>antes) usada=jan;
     }
     if(usada<NAO_REPETIR) afrouxadas.push({data:_dstr(hoje),trava:usada+'d',visitas:bloco.length});
@@ -978,10 +984,12 @@ function gerarRoteiro(forceAll=false){
     const k=gi==null?c1Remoto.findIndex(t=>!t._usado):c1Remoto.findIndex(t=>!t._usado&&t.gi===gi);
     if(k<0) return null; c1Remoto[k]._usado=true; return c1Remoto[k];
   };
-  // grupo com menos dias no mês, entre os que ainda têm ≥1 cliente livre
+  // grupo com menos dias no mês; prefere os que têm ≥1 livre, mas SEMPRE devolve um
+  // grupo (se todos travados, o de menos usos — encheDia afrouxa p/ não deixar dia vazio).
   const _escolheGrupo=hoje=>{
     let best=-1,bu=Infinity;
     gruposAng.forEach((g,i)=>{if(_disp(g,hoje).length>=1&&usos[i]<bu){bu=usos[i];best=i;}});
+    if(best<0){bu=Infinity;gruposAng.forEach((g,i)=>{if(usos[i]<bu){bu=usos[i];best=i;}});}
     return best;
   };
   const _blocoCasa=(hoje,ci)=>{
@@ -1004,6 +1012,9 @@ function gerarRoteiro(forceAll=false){
       const gi=_escolheGrupo(hoje);
       if(gi>=0){const d=diasDoGrupo(_disp(gruposAng[gi],hoje))[0]||[];bloco=encheDia(d,gruposAng[gi],hoje,0);usos[gi]++;}
     }
+    // DIA NUNCA VAZIO: se nada foi montado (grupos esgotados/setor só-casa), enche com o
+    // grupo casa, afrouxando a trava se preciso.
+    if(!bloco||!bloco.length){ bloco=encheDia([],grupoCasa,hoje,0); dia._casa=true; }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
   }
   // Dia de CASA comum (sextas)
