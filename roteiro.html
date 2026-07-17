@@ -932,13 +932,31 @@ function gerarRoteiro(forceAll=false){
   // o que faltar para o dia chegar às 16:30 é completado com PROSPECÇÃO (passo 10).
   // Assim as revisitas são as mínimas (só as legítimas, ≥7 dias) e ninguém passa de 4×/mês.
   // reserva = tempo já ocupado por agendamento do dia.
-  function encheDia(bloco,poolGrupo,hoje,reserva){
+  function encheDia(bloco,poolGrupo,hoje,reserva,ehSexta){
     const ids=new Set(bloco.map(_idc));
     const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA; // TETO 17:48
     const add=lista=>{ for(const c of lista){
       if(!ids.has(_idc(c))&&_livre(c)&&_podeVisitar(c)&&cabe(c)){bloco.push(c);ids.add(_idc(c));} } };
+    // visitas legítimas (trava 7 dias cheia), por importância (venda mensal + mix médio)
     add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
     add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
+    // TODO DIA TEM VISITAS: se o grupo esgotou (0 visitas legítimas), a trava cede só o
+    // bastante para garantir ao menos 1 visita real (o cliente mais importante, teto de
+    // 4×/mês mantido). O resto do dia é completado por PROSPECÇÃO — não por revisita.
+    if(bloco.length===0){
+      // 1º o grupo do dia + casa (afrouxando); 2º, para o dia NÃO ficar sem visita,
+      // qualquer cliente do setor ainda não esgotado (teto 4× sempre mantido). Esse 2º
+      // recurso NÃO vale na sexta — sexta é sempre grupo casa (regra absoluta).
+      const fontes=ehSexta?[[...new Set(poolGrupo.concat(grupoCasa))]]
+                          :[[...new Set(poolGrupo.concat(grupoCasa))], todosCli];
+      for(const fonte of fontes){
+        for(let jan=NAO_REPETIR-1; jan>=0 && bloco.length===0; jan--){
+          const cand=fonte.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort((a,z)=>_imp(z)-_imp(a));
+          if(cand.length&&cabe(cand[0])){bloco.push(cand[0]);ids.add(_idc(cand[0]));}
+        }
+        if(bloco.length) break;
+      }
+    }
     return bloco;
   }
   const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort((a,z)=>_imp(z)-_imp(a));
@@ -978,7 +996,7 @@ function gerarRoteiro(forceAll=false){
   const _blocoCasa=(hoje,ci)=>{
     const t=ci();
     const base=t?t.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)):[];
-    return encheDia(base,grupoCasa,hoje,0);
+    return encheDia(base,grupoCasa,hoje,0,true);
   };
   let ciCasa=0;
   const _proxC1Casa=()=>ciCasa<c1Casa.length?c1Casa[ciCasa++]:null;
@@ -1018,7 +1036,7 @@ function gerarRoteiro(forceAll=false){
     if(f.g==='casa'){ // agendado é do grupo casa → o dia vira dia de casa
       dia._casa=true;
       const t=_proxC1Casa();const base=t?t.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)):[];
-      bloco=encheDia(base,grupoCasa,hoje,reserva);
+      bloco=encheDia(base,grupoCasa,hoje,reserva,true);
     }else if(!dia.isSexta){
       // o dia passa a ser do GRUPO do cliente agendado (regra do gestor)
       const t=_pegaC1(f.g);
@@ -1035,7 +1053,7 @@ function gerarRoteiro(forceAll=false){
       const reg=_disp(gruposAng[f.g],hoje).sort((a,z)=>_distH(z)-_distH(a));
       bloco=[];
       reg.forEach(c=>{ if(tempoDia(bloco.concat(c))+reserva<=Math.min(JORNADA,limReg)){bloco.push(c);} });
-      bloco=encheDia(bloco,grupoCasa,hoje,reserva);
+      bloco=encheDia(bloco,grupoCasa,hoje,reserva,true);
       dia._mistoCidade=munAg;
       conflitos.push({tipo:'sexta com agendamento fora do grupo casa',data:dia.data,cidade:munAg,hora:ag.hora});
     }
