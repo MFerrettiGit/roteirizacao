@@ -945,10 +945,11 @@ function gerarRoteiro(forceAll=false){
     // 4×/mês mantido). O resto do dia é completado por PROSPECÇÃO — não por revisita.
     if(bloco.length===0){
       // 1º o grupo do dia + casa (afrouxando); 2º, para o dia NÃO ficar sem visita,
-      // qualquer cliente do setor ainda não esgotado (teto 4× sempre mantido). Esse 2º
-      // recurso NÃO vale na sexta — sexta é sempre grupo casa (regra absoluta).
-      const fontes=ehSexta?[[...new Set(poolGrupo.concat(grupoCasa))]]
-                          :[[...new Set(poolGrupo.concat(grupoCasa))], todosCli];
+      // qualquer cliente do setor ainda não esgotado (teto 4× sempre mantido). O 2º
+      // recurso só age quando o grupo do dia esgotou — inclusive na SEXTA: se o grupo
+      // casa já foi todo visitado 4×, a sexta pega de outro grupo (decisão do gestor,
+      // 2026-07-17: nesse caso raro, "todo dia tem visitas" vence "sexta = grupo casa").
+      const fontes=[[...new Set(poolGrupo.concat(grupoCasa))], todosCli];
       for(const fonte of fontes){
         for(let jan=NAO_REPETIR-1; jan>=0 && bloco.length===0; jan--){
           const cand=fonte.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort((a,z)=>_imp(z)-_imp(a));
