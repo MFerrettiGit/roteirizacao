@@ -527,41 +527,33 @@ function tituloCidade(m){return (m||'').toLowerCase().split(/\s+/)
   .map((p,i)=>(i>0&&['de','do','da','dos','das','e'].includes(p))?p:p.charAt(0).toUpperCase()+p.slice(1))
   .join(' ');}
 
+// Médias REAIS por classe (A/B/C/'') calculadas uma vez a partir de tempos-cliente.js:
+// junta o tempo real de todos os clientes daquela classe e tira a média. É a base usada
+// para quem AINDA não tem visita registrada — SEMPRE um tempo médio real, nunca uma
+// curva inventada arredondada a 15 min. Cache em _mediaClasse.
+let _mediaClasse=null;
+function mediaClasse(){
+  if(_mediaClasse) return _mediaClasse;
+  const acc={A:[],B:[],C:[],'':[]};
+  (window.CLIENTES_DATA||[]).forEach(c=>{
+    const t=window.TEMPO_CLIENTE&&window.TEMPO_CLIENTE[c.cod_cliente+'_'+c.loja];
+    if(t!=null){const k=c.classificacao||'';(acc[k]||(acc[k]=[])).push(+t);}
+  });
+  const all=[].concat(...Object.values(acc));
+  const gl=all.length?Math.round(all.reduce((s,x)=>s+x,0)/all.length):45;
+  const avg=a=>a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):gl;
+  _mediaClasse={A:avg(acc.A),B:avg(acc.B),C:avg(acc.C),'':avg(acc['']),GLOBAL:gl};
+  return _mediaClasse;
+}
+// Tempo de atendimento do cliente. SEMPRE um TEMPO MÉDIO REAL (min):
+//  1º) média real INDIVIDUAL do próprio cliente (tempos-cliente.js);
+//  2º) se ele ainda não tem visita registrada, a média real da SUA CLASSE (A/B/C).
+// Não há mais estimativa por perfil arredondada a 15 min.
 function duracaoCliente(c){
-  // 1º: MÉDIA REAL INDIVIDUAL do cliente (das visitas de jan–jul, em tempos-cliente.js).
-  // É o tempo que ESTE cliente costuma levar — não uma curva por classe A/B/C.
   const real=window.TEMPO_CLIENTE&&window.TEMPO_CLIENTE[c.cod_cliente+'_'+c.loja];
   if(real!=null) return Math.round(+real);
-
-  // Fallback (cliente sem histórico de visita): estimativa pelo perfil de compra.
-  const fatM=fatMes(c);
-  const mix=mixMedio(c);
-  const dias=diasSemPedido(c);
-
-  // Base mínima
-  let t=30;
-
-  // Faturamento mensal: clientes que movimentam mais exigem mais tempo de negociação
-  if(fatM>15000) t+=40;
-  else if(fatM>8000) t+=30;
-  else if(fatM>3000) t+=20;
-  else if(fatM>800)  t+=12;
-  else if(fatM>200)  t+=5;
-
-  // Mix baixo = oportunidade de ampliação de portfólio = mais tempo de apresentação
-  if(mix>0&&mix<4)       t+=15;
-  else if(mix>=4&&mix<8) t+=8;
-  else if(mix>=8&&mix<15)t+=3;
-  // mix alto (>=15) = visita de manutenção, sem incremento
-
-  // Tempo sem pedido: clientes que sumiram precisam mais atenção e reconquista
-  if(dias>120)     t+=15;
-  else if(dias>90) t+=12;
-  else if(dias>60) t+=8;
-  else if(dias>30) t+=4;
-
-  // Arredonda para múltiplos de 15 min; mínimo 30, máximo 120
-  return Math.max(30,Math.min(120,Math.round(t/15)*15));
+  const m=mediaClasse();
+  return m[c.classificacao||''] ?? m.GLOBAL;
 }
 function diasUteis(ano,mes){const d=new Date(ano,mes,1),r=[];while(d.getMonth()===mes){if(isUtil(d))r.push(ds(new Date(d)));d.setDate(d.getDate()+1);}return r;}
 function nomeDataLongo(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});}
@@ -1072,6 +1064,12 @@ function gerarRoteiro(forceAll=false){
       if(gi>=0){grupo=gruposAng[gi];const d=diasDoGrupo(_disp(grupo,hoje))[0]||[];bloco=encheDia(d,grupo,hoje,0);usos[gi]++;}
     }
     if(!grupo)grupo=grupoCasa;
+    // Dia remoto curto: chama os OUTROS grupos (mais perto → mais longe) antes de recorrer
+    // a prospecção. Pula o próprio grupo do dia (já esgotado) e o casa (papel de sexta).
+    if(bloco&&tempoDia(bloco)<MIN_JORNADA){
+      const gi=grupo===grupoCasa?-1:gruposAng.indexOf(grupo);
+      _reforcaComGrupos(bloco,hoje,0,new Set(gi>=0?[gi]:[]));
+    }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
     // Cidades do grupo → onde prospectar para completar o dia (mesmo sem visita: dia
     // NUNCA fica vazio, vira dia de prospecção nas cidades carentes daquele grupo).
@@ -1089,18 +1087,42 @@ function gerarRoteiro(forceAll=false){
     });
     return best;
   };
+  // DIA CURTO → CHAMA OUTRO GRUPO (regra do gestor, 2026-07-20): quando o dia não chega ao
+  // piso (16:30) com o próprio grupo + casa, o certo NÃO é lotar de prospecção — é puxar
+  // clientes livres dos DEMAIS grupos, do MAIS PRÓXIMO de casa ao mais distante, até o dia
+  // encher (ou acabarem os clientes livres). Prospecção deixa de ser tapa-buraco.
+  // `excl` = índices de grupos a pular (o próprio grupo do dia, já esgotado).
+  function _reforcaComGrupos(bloco,hoje,reserva,excl){
+    excl=excl||new Set();
+    const ids=new Set(bloco.map(_idc));
+    const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA;
+    const ordem=gruposAng.map((g,i)=>({g,i,d:g.length?g.reduce((s,c)=>s+_distH(c),0)/g.length:Infinity}))
+      .filter(o=>!excl.has(o.i)).sort((a,b)=>a.d-b.d);
+    const usados=[];
+    for(const {g,i} of ordem){
+      if(tempoDia(bloco)+(reserva||0)>=MIN_JORNADA) break;
+      const cand=g.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje,NAO_REPETIR)&&_livre(c)&&_podeVisitar(c)).sort(_ordemRevisita);
+      let usou=false;
+      for(const c of cand){
+        if(tempoDia(bloco)+(reserva||0)>=MIN_JORNADA) break;
+        if(cabe(c)){bloco.push(c);ids.add(_idc(c));usou=true;}
+      }
+      if(usou) usados.push('G'+(i+1));
+    }
+    return usados;
+  }
   // Dia de CASA comum (sextas)
   function _montaCasa(dia){
     dia._casa=true;const hoje=_dnum(dia.data);
     let bloco=_blocoCasa(hoje,_proxC1Casa);
-    // SEXTA FRACA (regra do gestor, 2026-07-17): se o grupo casa não enche o dia, em vez
-    // de lotar de prospecção, JUNTA o grupo remoto mais próximo e monta a rota com os dois.
+    // SEXTA FRACA (regra do gestor, 2026-07-17/20): se o grupo casa não enche o dia, em vez
+    // de lotar de prospecção, CHAMA os grupos remotos — do mais perto ao mais longe — até o
+    // dia atingir o piso. Nunca mais uma sexta com 1 cliente + pilha de prospecções.
     if(tempoDia(bloco)<MIN_JORNADA){
-      const gi=_grupoMaisPerto(hoje);
-      if(gi>=0){
-        bloco=encheDia(bloco,gruposAng[gi],hoje,0,true);
-        dia._juntou='G'+(gi+1);
-        conflitos.push({tipo:'sexta reforçada com grupo vizinho',data:dia.data,grupo:'G'+(gi+1)});
+      const gs=_reforcaComGrupos(bloco,hoje,0);
+      if(gs.length){
+        dia._juntou=gs.join('+');
+        conflitos.push({tipo:'sexta reforçada com grupo(s) vizinho(s)',data:dia.data,grupo:gs.join('+')});
       }
     }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
@@ -1266,26 +1288,28 @@ function gerarRoteiro(forceAll=false){
       if(vi<ordenados.length) slots.push(_slotVis(ordenados[vi++]));
     }
 
-    // ── Prospecção COMPLETA o dia até as 16:30 ────────────────
-    // Regra do gestor (2026-07-17): em vez de revisitar demais, o que faltar para o dia
-    // chegar às 16:30 vira PROSPECÇÃO, feita nas cidades do dia com MENOS clientes na
-    // carteira (buscar clientes novos onde a base é rala). Quantas forem necessárias.
-    {
-      const tReal=tempoDia(clientes); // tempo real das visitas (trajeto+atend+ida+volta)
-      const nProsp=Math.max(0,Math.ceil((MIN_JORNADA-tReal)/CFG.pros));
-      // cidades para prospecção: as do dia (se há visita) ou as do grupo (dia sem visita)
+    // ── Prospecção: NO MÁXIMO 1 por dia (regra absoluta do gestor) ────
+    // ⚠️ CORREÇÃO 2026-07-20: prospecção NÃO é mais tapa-buraco de dia curto — encher o dia
+    // é papel de "chamar outro grupo" (_reforcaComGrupos). Aqui vale a regra original:
+    // 1 prospecção/dia, teto CFG.maxProsp no mês, SEM repetir cidade, só em cidade com
+    // MENOS de 5 clientes na carteira (maxClientesSingleton). Entra logo APÓS a última
+    // visita naquela cidade (momento oportuno) — nunca uma pilha de prospecções.
+    if(prosContador<CFG.maxProsp){
       const munsDia=(clientes.length?[...new Set(clientes.map(c=>c._mun||'?'))]:(diaObj._munsProsp||[]))
-        .filter(m=>porMun[m]&&porMun[m].length)
-        .sort((a,z)=>porMun[a].length-porMun[z].length); // as mais carentes primeiro
-      for(let k=0;k<nProsp&&munsDia.length;k++){
-        const mun=munsDia[k%munsDia.length], clsMun=porMun[mun], n=clsMun.length;
-        slots.push({tipo:'prospeccao',
+        .filter(m=>porMun[m]&&porMun[m].length&&porMun[m].length<=CFG.maxClientesSingleton&&!cidProspectadas.has(m))
+        .sort((a,z)=>porMun[a].length-porMun[z].length); // a mais carente primeiro
+      if(munsDia.length){
+        const mun=munsDia[0], clsMun=porMun[mun], n=clsMun.length;
+        const card={tipo:'prospeccao',
           nome:`Prospecção — ${tituloCidade(mun)}`,
           horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,
           classificacao:'',municipio:mun,
           lat:clsMun.reduce((s,c)=>s+(+c.latitude),0)/n,
-          lon:clsMun.reduce((s,c)=>s+(+c.longitude),0)/n});
-        cur+=CFG.pros; prosContador++;
+          lon:clsMun.reduce((s,c)=>s+(+c.longitude),0)/n};
+        // momento oportuno: logo depois da última visita naquela cidade (se houve visita lá)
+        const idx=slots.map(s=>s.municipio).lastIndexOf(mun);
+        if(idx>=0) slots.splice(idx+1,0,card); else slots.push(card);
+        cur+=CFG.pros; prosContador++; cidProspectadas.add(mun);
       }
     }
 
@@ -1455,9 +1479,10 @@ function renderDia(date){
       sub+=`<span title="Média mensal faturada nos últimos 12 meses">💰 ${fmtBRL(s.fatMes)}/mês</span>`;
       sub+=`<span title="Mix médio: SKUs diferentes por pedido (12 meses)">📦 ${fmtMix(s.mixMedio)} mix médio</span>`;
       if(s.duracao){
-        // Distingue média REAL (histórico do TimeService) de ESTIMATIVA (cliente sem visita registrada).
+        // Tempo médio real: individual do cliente, ou média real da classe se ele ainda
+        // não tem visita registrada. Nunca mais é estimativa por perfil.
         const _real=window.TEMPO_CLIENTE&&window.TEMPO_CLIENTE[s.clienteId]!=null;
-        sub+=`<span title="${_real?'Tempo médio REAL de atendimento deste cliente (visitas jan–jul)':'Cliente sem visita registrada — tempo ESTIMADO pelo perfil de compra (arredondado a 15 min)'}">⏱ ${s.duracao} min${_real?'':' (est.)'}</span>`;
+        sub+=`<span title="${_real?'Tempo médio real de atendimento deste cliente (visitas jan–jul)':'Cliente ainda sem visita registrada — usando a média real da classe '+(s.classificacao||'sem classe')}">⏱ ${s.duracao} min</span>`;
       }
     }
     let acao='';
@@ -1470,7 +1495,10 @@ function renderDia(date){
       if(s.obs)sub+=`<span>📝 ${s.obs}</span>`;
       acao=`<button class="btn-xag" onclick="event.stopPropagation();cancelarAg('${s.clienteId}','${dstr}')" title="Cancelar este agendamento">✕ Cancelar</button>`;
     }
-    if(s.tipo==='prospeccao'){tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;}
+    if(s.tipo==='prospeccao'){
+      tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;
+      sub+=`<span title="Tempo estimado reservado para a prospecção (CFG.pros)">⏱ ~${s.duracao||CFG.pros} min</span>`;
+    }
     if(s.tipo==='pernoite'){tags+=`<span class="tag tag-pernoite">🛏️ Dormir na cidade</span>`;if(s.obs)sub+=`<span>${s.obs}</span>`;}
     if(s.municipio&&s.tipo!=='visita') sub+=`<span>📍 ${s.municipio}</span>`;
 
