@@ -112,8 +112,13 @@ LEFT JOIN VENDAS V
 WHERE SA1.A1_MSBLQL  != '1'
   AND ISNULL(LTRIM(RTRIM(SA1.A1_ZZLAT)),  '') NOT IN ('', '0')
   AND ISNULL(LTRIM(RTRIM(SA1.A1_ZZLONG)), '') NOT IN ('', '0')
+  -- CLIENTES excluidos da roteirizacao (caso a caso, decisao do gestor):
+  -- 50853720/0001 COMERCIAL FURTUOSO (Piracicaba, setor Campinas Norte) = so digitacao,
+  -- o vendedor nao visita esse cliente.
+  AND NOT (SA1.A1_COD = '50853720' AND SA1.A1_LOJA = '0001')
   -- Excluir setores fora da cobertura da roteirizacao:
   -- Centro Oeste (Marilia, Aracatuba, Bauru, etc.), excluidos, M. Ferretti e outros sem vendedor externo
+  -- 2026-07-17: AMERICANA e RIO CLARO saíram da exclusão (passam a ser roteirizados).
   AND LTRIM(RTRIM(SA3.A3_NREDUZ)) NOT IN (
       'EXCLUIDOS',
       'M. FERRETTI',
@@ -122,12 +127,10 @@ WHERE SA1.A1_MSBLQL  != '1'
       'C.OESTE\MAR18',
       'MARILIA',
       'ARACATUBA',
-      'AMERICANA',
       'AVARE',
       'BAURU',
       'FERNANDOPOLIS',
       'PRES.PRUDENTE',
-      'RIO CLARO',
       'RIO PRETO',
       'JABOTICABAL',
       'NORDESTE',

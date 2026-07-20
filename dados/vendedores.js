@@ -24,6 +24,8 @@ window.VENDEDORES_HOME = {
   "S.J.DOS CAMPOS":   { nome:"Mariângela",  lat:-23.2036247, lon:-45.8862359 }, // Vila Sanches, S.J. dos Campos
   "S.J.BOA VISTA":    { nome:"Célia",       lat:-21.9718858, lon:-46.7615039 }, // Riviera de São João, S.J. Boa Vista
   "CARAGUATATUBA":    { nome:"Karina",      lat:-23.6263070, lon:-45.4370867 }, // Vila Marcondes, Caraguatatuba
+  "AMERICANA":        { nome:"Maira",       lat:-22.7365032, lon:-47.3840733 }, // mora em SANTA BÁRBARA D'OESTE
+  "RIO CLARO":        { nome:"Costinha",    lat:-22.2097364, lon:-47.3875149 }, // mora em LEME (Costinha = Aparecido)
 };
 
 // Fora da roteirização (setor excluído da query), mantidos só como referência:

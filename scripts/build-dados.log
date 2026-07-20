@@ -83,3 +83,27 @@ Invalid column name 'ZZLONG'."
 2026-07-15 14:17:07  Produtos por cliente: 64212 linhas.
 2026-07-15 14:17:08  produtos-cliente.js gerado (1050 clientes)
 2026-07-15 14:17:08  === build-dados concluÃ­do ===
+2026-07-16 06:00:03  === Iniciando build-dados ===
+2026-07-16 06:00:03  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-16 06:01:03  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-17 06:00:03  === Iniciando build-dados ===
+2026-07-17 06:00:03  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-17 06:01:03  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-18 06:00:02  === Iniciando build-dados ===
+2026-07-18 06:00:02  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-18 06:01:02  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-19 06:00:02  === Iniciando build-dados ===
+2026-07-19 06:00:02  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-19 06:01:02  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-20 06:00:02  === Iniciando build-dados ===
+2026-07-20 06:00:02  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-20 06:01:02  ERRO na query: Exceção ao chamar "Open" com "0" argumento(s): "Erro de rede ou específico à instância ao estabelecer conexão com o SQL Server. O servidor não foi encontrado ou não estava acessível. Verifique se o nome da instância está correto e se o SQL Server está configurado para permitir conexões remotas. (provider: Named Pipes Provider, error: 40 - Não foi possível abrir uma conexão com o SQL Server)"
+2026-07-20 09:03:37  === Iniciando build-dados ===
+2026-07-20 09:03:37  Credencial OK (user: CLT160463MFERRETTICONSULTA)
+2026-07-20 09:03:37  Conectado: 189.126.153.75,2270 / CO136Y_160463_PR_PD
+2026-07-20 09:03:39  Query retornou 1182 registros.
+2026-07-20 09:03:40  Vendedores: 16 | Clientes com geo: 1182
+2026-07-20 09:03:40  clientes.js gerado (1182 clientes, 16 vendedores)
+2026-07-20 09:03:41  Produtos por cliente: 63717 linhas.
+2026-07-20 09:03:43  produtos-cliente.js gerado (1182 clientes)
+2026-07-20 09:03:43  === build-dados concluÃ­do ===
