@@ -130,6 +130,14 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
 .slot-card.tipo-almoco .slot-side{background:var(--cinza);}
 .slot-card.tipo-prospeccao .slot-side{background:var(--verde);}
 .slot-card.tipo-agendamento .slot-side{background:var(--azul);}
+.slot-card.tipo-pernoite .slot-side{background:var(--roxo);}
+.slot-card.tipo-pernoite{background:#faf5ff;border:1px dashed var(--roxo);}
+[data-theme="dark"] .slot-card.tipo-pernoite{background:#2e1065;}
+.tag-pernoite{background:#faf5ff;color:#6d28d9;border:1px solid var(--roxo);}
+[data-theme="dark"] .tag-pernoite{background:#2e1065;color:#c4b5fd;}
+.aviso-saida{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:10px;border-radius:9px;
+  background:#faf5ff;border:1px dashed var(--roxo);color:#6d28d9;font-size:.8rem;font-weight:600;}
+[data-theme="dark"] .aviso-saida{background:#2e1065;color:#c4b5fd;}
 .slot-card.classe-A .slot-side{background:var(--vermelho);}
 .slot-card.classe-B .slot-side{background:var(--laranja);}
 .slot-card.classe-C .slot-side{background:var(--amarelo);}
@@ -329,6 +337,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
       <div class="dia-cards">
         <div class="dcard"><div class="dc-icon">👥</div><div class="dc-val" id="dcClientes">—</div><div class="dc-lbl">Visitas hoje</div><div class="dc-sub" id="dcRep"></div></div>
         <div class="dcard"><div class="dc-icon">💰</div><div class="dc-val" id="dcFat">—</div><div class="dc-lbl">Média/mês no dia</div></div>
+        <div class="dcard"><div class="dc-icon">🏁</div><div class="dc-val" id="dcFim">—</div><div class="dc-lbl">Fim previsto</div><div class="dc-sub" id="dcFimSub"></div></div>
         <div class="dcard"><div class="dc-icon">🚗</div><div class="dc-val" id="dcKm">—</div><div class="dc-lbl">Km estimado</div></div>
         <div class="dcard"><div class="dc-icon">📍</div><div class="dc-val" style="font-size:.9rem" id="dcCidades">—</div><div class="dc-lbl">Cidades</div><div class="dc-sub" id="dcPros"></div></div>
       </div>
@@ -508,6 +517,10 @@ function fatMes(c){return c.fat_medio_mes!=null?+c.fat_medio_mes:(+c.fat_12m||0)
 function mixMedio(c){return c.mix_medio!=null?+c.mix_medio:(+c.mix_produtos||0);}
 function fmtBRL(v){return 'R$ '+Math.round(v||0).toLocaleString('pt-BR');}
 function fmtMix(v){return (+v||0).toLocaleString('pt-BR',{maximumFractionDigits:1});}
+// CIDADE em Nome Próprio: "CASA BRANCA" → "Casa Branca" (preposições em minúscula)
+function tituloCidade(m){return (m||'').toLowerCase().split(/\s+/)
+  .map((p,i)=>(i>0&&['de','do','da','dos','das','e'].includes(p))?p:p.charAt(0).toUpperCase()+p.slice(1))
+  .join(' ');}
 
 function duracaoCliente(c){
   // 1º: MÉDIA REAL INDIVIDUAL do cliente (das visitas de jan–jul, em tempos-cliente.js).
@@ -560,6 +573,18 @@ function kmDia(slots){
 }
 // Rede = mesmo cadastro (mesmo código de cliente, lojas diferentes)
 function nomeRede(n){return (n||'').replace(/\s*[-–]\s*LOJA\s*\d+\.?\s*$/i,'').replace(/\s+LTDA\.?$/i,'').trim()||n||'—';}
+// HORÁRIO PREVISTO DE TÉRMINO do dia: 8:00 + trajetos reais + atendimentos + 1h de almoço.
+// Se o dia termina com pernoite, não conta a volta para casa (o vendedor dorme fora).
+function fimPrevisto(slots){
+  const p=(slots||[]).filter(s=>s.lat&&s.lon&&s.tipo!=='almoco');
+  if(!p.length) return null;
+  const H=window.VENDEDORES_HOME&&window.VENDEDORES_HOME[SETOR];
+  const dorme=(slots||[]).some(s=>s.tipo==='pernoite');
+  let t=0,pl=H?H.lat:p[0].lat,po=H?H.lon:p[0].lon;
+  p.forEach(s=>{const km=haversine(pl,po,s.lat,s.lon);t+=km/velReal(km)*60+(+s.duracao||0);pl=s.lat;po=s.lon;});
+  if(H&&!dorme){const km=haversine(pl,po,H.lat,H.lon);t+=km/velReal(km)*60;}
+  return {hora:m2h(Math.round(CFG.horaIni+t+60)),chegaCasa:!!H&&!dorme};
+}
 
 // ── PERSISTÊNCIA ─────────────────────────────────────────────
 function chv(t){const ym=mesSel.toISOString().slice(0,7).replace('-','');return`fr_rot_${t}_${COD}_${ym}`;}
@@ -1200,7 +1225,7 @@ function gerarRoteiro(forceAll=false){
       for(let k=0;k<nProsp&&munsDia.length;k++){
         const mun=munsDia[k%munsDia.length], clsMun=porMun[mun], n=clsMun.length;
         slots.push({tipo:'prospeccao',
-          nome:`Prospecção — ${mun.charAt(0)+mun.slice(1).toLowerCase()}`,
+          nome:`Prospecção — ${tituloCidade(mun)}`,
           horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,
           classificacao:'',municipio:mun,
           lat:clsMun.reduce((s,c)=>s+(+c.latitude),0)/n,
@@ -1224,6 +1249,31 @@ function gerarRoteiro(forceAll=false){
       s.forEach(x=>{if(_ehVis(x)) x.rep=jaVis.has(x.clienteId);});
       s.forEach(x=>{if(_ehVis(x)) jaVis.add(x.clienteId);});
     });
+  }
+
+  // ── 12. PERNOITE: dois dias seguidos na mesma região distante ────────────────
+  // Se o vendedor TERMINA o dia numa cidade longe e o dia seguinte COMEÇA lá (ou bem
+  // perto), não faz sentido voltar para casa e ir de novo: sinaliza para DORMIR na cidade
+  // e emendar os clientes que sobraram no dia seguinte. (Caso 13→14: Casa Branca.)
+  {
+    const PERNOITE_KM=35; // a partir dessa distância de casa vale dormir fora
+    const PERTO_KM=25;    // o dia seguinte começa "na mesma região"
+    const dias=Object.keys(novoRot).sort();
+    for(let i=0;i<dias.length-1;i++){
+      const a=novoRot[dias[i]]||[], b=novoRot[dias[i+1]]||[];
+      const va=a.filter(s=>s.lat&&s.lon&&s.tipo!=='almoco'), vb=b.filter(s=>s.lat&&s.lon&&s.tipo!=='almoco');
+      if(!va.length||!vb.length) continue;
+      const ult=va[va.length-1], pri=vb[0];
+      const dCasa=haversine(homeLat,homeLon,ult.lat,ult.lon);
+      const dEntre=haversine(ult.lat,ult.lon,pri.lat,pri.lon);
+      if(dCasa>PERNOITE_KM&&dEntre<PERTO_KM){
+        const cid=(ult.municipio||'');
+        const kmEcon=Math.round(dCasa*2-dEntre); // ida + volta que deixa de fazer
+        a.push({tipo:'pernoite',nome:`Pernoitar em ${tituloCidade(cid)}`,
+          municipio:cid,classificacao:'',duracao:0,
+          obs:`Amanhã começa aqui — evita voltar para casa e retornar (~${kmEcon} km a menos)`});
+      }
+    }
   }
 
   roteiro=novoRot;
@@ -1293,6 +1343,9 @@ function renderDia(date){
   document.getElementById('dcClientes').textContent=vis.length||'—';
   document.getElementById('dcRep').textContent='';
   document.getElementById('dcFat').textContent=vis.length?fmtBRL(vis.reduce((s,x)=>s+(+x.fatMes||0),0)):'—';
+  const fim=fimPrevisto(slots);
+  document.getElementById('dcFim').textContent=fim?fim.hora:'—';
+  document.getElementById('dcFimSub').textContent=fim?(fim.chegaCasa?'chegada em casa':'última visita'):'';
   document.getElementById('dcKm').textContent=km?km+'km':'—';
   document.getElementById('dcCidades').textContent=cids.join(' · ')||'—';
   document.getElementById('dcPros').textContent=pros.length?'🌱 prospecção':'';
@@ -1317,7 +1370,8 @@ function renderDia(date){
   slots.filter(s=>s.tipo!=='almoco').forEach(s=>{
     ordem++;
     const corSide=s.tipo==='visita'?({A:'var(--vermelho)',B:'var(--laranja)',C:'var(--amarelo)','':'var(--cinza)'}[s.classificacao]||'var(--cinza)')
-      :s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)':'var(--cinza)';
+      :s.tipo==='agendamento'?'var(--azul)':s.tipo==='prospeccao'?'var(--verde)'
+      :s.tipo==='pernoite'?'var(--roxo)':'var(--cinza)';
 
     let tags='',sub='',badge='';
     // Do cliente, mostrar APENAS: média de faturamento (12m) e mix médio por pedido.
@@ -1326,6 +1380,7 @@ function renderDia(date){
       if(s.municipio) sub+=`<span>📍 ${s.municipio}</span>`;
       sub+=`<span title="Média mensal faturada nos últimos 12 meses">💰 ${fmtBRL(s.fatMes)}/mês</span>`;
       sub+=`<span title="Mix médio: SKUs diferentes por pedido (12 meses)">📦 ${fmtMix(s.mixMedio)} mix médio</span>`;
+      if(s.duracao) sub+=`<span title="Tempo médio real de atendimento deste cliente (visitas jan–jul)">⏱ ${s.duracao} min</span>`;
     }
     let acao='';
     if(s.tipo==='agendamento'){
@@ -1338,6 +1393,7 @@ function renderDia(date){
       acao=`<button class="btn-xag" onclick="event.stopPropagation();cancelarAg('${s.clienteId}','${dstr}')" title="Cancelar este agendamento">✕ Cancelar</button>`;
     }
     if(s.tipo==='prospeccao'){tags+=`<span class="tag tag-pros">🌱 Prospecção</span>`;}
+    if(s.tipo==='pernoite'){tags+=`<span class="tag tag-pernoite">🛏️ Dormir na cidade</span>`;if(s.obs)sub+=`<span>${s.obs}</span>`;}
     if(s.municipio&&s.tipo!=='visita') sub+=`<span>📍 ${s.municipio}</span>`;
 
     const abre=(s.tipo==='visita'||s.tipo==='agendamento')&&s.clienteId
@@ -1358,7 +1414,15 @@ function renderDia(date){
       </div>
     </div>`;
   });
-  tl.innerHTML=h;
+  // Se o dia ANTERIOR terminou com pernoite, hoje o vendedor já acorda na cidade.
+  let avisoSaida='';
+  {
+    const ants=Object.keys(roteiro).filter(x=>x<dstr).sort();
+    const ant=ants.length?roteiro[ants[ants.length-1]]:null;
+    const pn=ant&&ant.find&&ant.find(s=>s.tipo==='pernoite');
+    if(pn) avisoSaida=`<div class="aviso-saida">🛏️ Você dormiu em ${tituloCidade(pn.municipio)} — o dia começa por aqui</div>`;
+  }
+  tl.innerHTML=avisoSaida+h;
 }
 
 function renderSbDia(){
