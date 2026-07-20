@@ -867,6 +867,42 @@ function gerarRoteiro(forceAll=false){
     }
   });
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  // MODO 2 — QUADRANTES (setor COMPACTO, ex.: Campinas Norte) — gestor 2026-07-20
+  // Se ≥ PCT_COMPACTO dos clientes estão a ≤ RAIO_COMPACTO km da casa, o setor é compacto
+  // (tipicamente 1 cidade só). Aí os grupos NÃO são fatias angulares por cidade — são 4
+  // QUADRANTES geográficos (Norte/Leste/Sul/Oeste) a partir da casa. NÃO há grupo-casa nem
+  // sexta especial: cada quadrante é um grupo e enche os dias como qualquer outro.
+  const RAIO_COMPACTO=60, PCT_COMPACTO=0.90, MARGEM_DIVISA=12; // km · fração · graus da divisa
+  const _naFaixa=todosCli.filter(c=>_distH(c)<=RAIO_COMPACTO).length;
+  const MODO_QUADRANTE = todosCli.length>0 && (_naFaixa/todosCli.length)>=PCT_COMPACTO;
+  const NOME_QUAD={N:'Norte',L:'Leste',S:'Sul',O:'Oeste'};
+  let gruposNome=null; // rótulos paralelos a gruposAng no modo quadrante (senão null → G1,G2…)
+  if(MODO_QUADRANTE){
+    // quadrante GEOGRÁFICO puro pelo rumo da casa (0=Norte, 90=Leste, 180=Sul, 270=Oeste)
+    const _quad=c=>{const b=bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude);
+      return (b>=45&&b<135)?'L':(b>=135&&b<225)?'S':(b>=225&&b<315)?'O':'N';};
+    // distância angular até a divisa mais próxima (as diagonais em 45/135/225/315)
+    const _difDivisa=c=>{const b=bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude);
+      return Math.min(...[45,135,225,315].map(d=>{const x=Math.abs(b-d)%360;return x>180?360-x:x;}));};
+    // Cliente NA DIVISA (≤ MARGEM_DIVISA° da diagonal) entra no quadrante do CLIENTE mais
+    // próximo dele — a regra do gestor "traço até a cidade mais próxima", adaptada para ponto
+    // (Campinas é 1 cidade só, então o vizinho é um cliente, não uma cidade).
+    const _fin={};
+    todosCli.forEach(c=>{_fin[_idc(c)]=_quad(c);});
+    todosCli.forEach(c=>{
+      if(_difDivisa(c)>MARGEM_DIVISA) return;
+      let best=null,bd=Infinity;
+      todosCli.forEach(o=>{if(o===c)return;const d=haversine(+c.latitude,+c.longitude,+o.latitude,+o.longitude);if(d<bd){bd=d;best=o;}});
+      if(best) _fin[_idc(c)]=_quad(best);
+    });
+    const Q={N:[],L:[],S:[],O:[]};
+    todosCli.forEach(c=>Q[_fin[_idc(c)]].push(c));
+    grupoCasa.length=0;                 // sem grupo-casa no modo quadrante
+    gruposAng.length=0; gruposNome=[];
+    ['N','L','S','O'].forEach(k=>{ if(Q[k].length){ gruposAng.push(Q[k]); gruposNome.push(NOME_QUAD[k]); } });
+  }
+
   // 2) DIMENSIONAMENTO POR TEMPO (regra do gestor, 2026-07-16) — substitui o antigo
   //    "5 a 8 clientes por dia". Não há mais mínimo nem máximo de clientes: o dia enche
   //    enquanto couber na JORNADA útil, contando IDA da casa ao grupo, ATENDIMENTO REAL
@@ -1115,8 +1151,9 @@ function gerarRoteiro(forceAll=false){
       dia._casa=true;
       const t=_proxC1Casa();const base=t?t.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)):[];
       bloco=encheDia(base,grupoCasa,hoje,reserva,true);
-    }else if(!dia.isSexta){
-      // o dia passa a ser do GRUPO do cliente agendado (regra do gestor)
+    }else if(!dia.isSexta||MODO_QUADRANTE){
+      // o dia passa a ser do GRUPO/QUADRANTE do cliente agendado (no modo quadrante não há
+      // sexta especial → agendamento na sexta é dia normal do quadrante).
       const t=_pegaC1(f.g);
       const base=t?t.clientes.filter(c=>!_bloq(c,hoje)&&_podeVisitar(c)):(diasDoGrupo(_disp(gruposAng[f.g],hoje))[0]||[]);
       bloco=encheDia(base,gruposAng[f.g],hoje,reserva);usos[f.g]++;
@@ -1142,14 +1179,16 @@ function gerarRoteiro(forceAll=false){
   // ORDEM DE MONTAGEM: 1º os dias com visita marcada (têm prioridade e definem o grupo
   // do dia), depois os dias remotos comuns e por fim as sextas do grupo casa.
   plano.filter(p=>forcado[p.data]).sort(_cron).forEach(_montaForcado);
-  plano.filter(p=>!forcado[p.data]&&!p.isSexta).sort(_cron).forEach(_montaRemoto);
-  plano.filter(p=>!forcado[p.data]&&p.isSexta).sort(_cron).forEach(_montaCasa);
+  // Modo quadrante: TODOS os dias (inclusive sexta) são dias de quadrante → _montaRemoto.
+  plano.filter(p=>!forcado[p.data]&&(MODO_QUADRANTE||!p.isSexta)).sort(_cron).forEach(_montaRemoto);
+  plano.filter(p=>!forcado[p.data]&&!MODO_QUADRANTE&&p.isSexta).sort(_cron).forEach(_montaCasa);
 
   // Diagnóstico para validação (não afeta o roteiro)
   window._motorV3={
     homeRadius:HOME_RADIUS,gapCidade:GAP_CIDADE,
+    modo:MODO_QUADRANTE?'quadrante':'angular', compactoPct:Math.round(_naFaixa/Math.max(1,todosCli.length)*100),
     grupoCasa:grupoCasa.length,remotos:remotos.length,
-    grupos:gruposAng.map((g,i)=>({g:'G'+(i+1),n:g.length,cidades:[...new Set(g.map(c=>c.municipio))].join('+'),
+    grupos:gruposAng.map((g,i)=>({g:(gruposNome?gruposNome[i]:'G'+(i+1)),n:g.length,cidades:[...new Set(g.map(c=>c.municipio))].join('+'),
       rumo:Math.round(bearingDeg(homeLat,homeLon,..._cenB(g)))})),
     c1Remoto:c1Remoto.length,c1Casa:c1Casa.length,conflitos,
     naoRepetir:NAO_REPETIR,afrouxadas
