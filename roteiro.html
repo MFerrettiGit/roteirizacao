@@ -313,7 +313,7 @@ header .titulo{color:#fff;font-size:.95rem;font-weight:600;flex:1;white-space:no
       <div class="stats-row">
         <div class="stat-box" id="stVisBox"><div class="sv" id="stVis">—</div><div class="sl">Visitas<br>meta 100</div></div>
         <div class="stat-box"><div class="sv" id="stCid">—</div><div class="sl">Cidades<br>no mês</div></div>
-        <div class="stat-box" id="stPBox"><div class="sv" id="stP">—</div><div class="sl">Prospecções<br>máx 6</div></div>
+        <div class="stat-box" id="stPBox"><div class="sv" id="stP">—</div><div class="sl">Prospecções<br>no mês</div></div>
         <div class="stat-box"><div class="sv" id="stKm">—</div><div class="sl">Km total<br>estimado</div></div>
       </div>
     </div>
@@ -449,7 +449,7 @@ const CFG = {
   pros: 45,
   metaVis: 100, metaProsp: 6, maxProsp: 6,
   minPorDia: 5, maxPorDia: 8, maxDesvioKm: 35,
-  maxClientesSingleton: 4, // cidade com ≤ N clientes na carteira → gera prospecção (qualquer distância)
+  maxClientesSingleton: 2, // cidade com ≤ N (MENOS DE 3) clientes na carteira → gera prospecção ao passar por lá
   maxAporDia: 2,
   tempoClasse: {A:90, B:60, C:45, '':30},
 };
@@ -1180,15 +1180,15 @@ function gerarRoteiro(forceAll=false){
 
   // ── 10. Constrói slots com horários ──────────────────────────
   let prosContador=0;
-  const cidProspectadas=new Set(); // não gastar as prospecções todas na mesma cidade
 
   plano.forEach((diaObj)=>{
     const {data,clientes,simulado}=diaObj;
 
     // Agendamentos fixos para este dia
     const agsFix=(agPorDia[data]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
-    // Dia sem visita mas com cidades de prospecção NÃO é pulado — vira dia de prospecção.
-    if(!clientes.length&&!agsFix.length&&!(diaObj._munsProsp&&diaObj._munsProsp.length)) return;
+    // Prospecção agora só existe onde o vendedor PASSA (cidade com visita). Dia sem visita
+    // nem agendamento é pulado.
+    if(!clientes.length&&!agsFix.length) return;
 
     // NN dentro de cada cidade, mantendo ordem dos blocos
     function nnCity(cls,sLat,sLon){
@@ -1288,29 +1288,29 @@ function gerarRoteiro(forceAll=false){
       if(vi<ordenados.length) slots.push(_slotVis(ordenados[vi++]));
     }
 
-    // ── Prospecção: NO MÁXIMO 1 por dia (regra absoluta do gestor) ────
-    // ⚠️ CORREÇÃO 2026-07-20: prospecção NÃO é mais tapa-buraco de dia curto — encher o dia
-    // é papel de "chamar outro grupo" (_reforcaComGrupos). Aqui vale a regra original:
-    // 1 prospecção/dia, teto CFG.maxProsp no mês, SEM repetir cidade, só em cidade com
-    // MENOS de 5 clientes na carteira (maxClientesSingleton). Entra logo APÓS a última
-    // visita naquela cidade (momento oportuno) — nunca uma pilha de prospecções.
-    if(prosContador<CFG.maxProsp){
-      const munsDia=(clientes.length?[...new Set(clientes.map(c=>c._mun||'?'))]:(diaObj._munsProsp||[]))
-        .filter(m=>porMun[m]&&porMun[m].length&&porMun[m].length<=CFG.maxClientesSingleton&&!cidProspectadas.has(m))
+    // ── Prospecção — REGRA SIMPLES (gestor, 2026-07-20) ──────────────────────
+    // Para CADA cidade que o vendedor PASSOU no dia (tem visita lá) e que tem MENOS DE 3
+    // clientes na carteira (≤ maxClientesSingleton): uma ORDEM de prospecção, logo após a
+    // última visita naquela cidade. SEM limite de quantidade, SEM contar tempo, SEM
+    // substituir cliente — não entra em tempoDia e não enche o dia (isso é papel de
+    // "chamar outro grupo"). "Cidade com <3 clientes + passou por lá."
+    {
+      const munsPassou=[...new Set(clientes.map(c=>c._mun||c.municipio))]
+        .filter(m=>porMun[m]&&porMun[m].length<=CFG.maxClientesSingleton)
         .sort((a,z)=>porMun[a].length-porMun[z].length); // a mais carente primeiro
-      if(munsDia.length){
-        const mun=munsDia[0], clsMun=porMun[mun], n=clsMun.length;
+      munsPassou.forEach(mun=>{
+        const clsMun=porMun[mun], n=clsMun.length;
         const card={tipo:'prospeccao',
           nome:`Prospecção — ${tituloCidade(mun)}`,
-          horaIni:m2h(cur),horaFim:m2h(cur+CFG.pros),duracao:CFG.pros,
+          duracao:CFG.pros, // só informativo no card; NÃO entra no cálculo de tempo
           classificacao:'',municipio:mun,
           lat:clsMun.reduce((s,c)=>s+(+c.latitude),0)/n,
           lon:clsMun.reduce((s,c)=>s+(+c.longitude),0)/n};
-        // momento oportuno: logo depois da última visita naquela cidade (se houve visita lá)
+        // logo depois da última visita naquela cidade (o vendedor está passando por lá)
         const idx=slots.map(s=>s.municipio).lastIndexOf(mun);
         if(idx>=0) slots.splice(idx+1,0,card); else slots.push(card);
-        cur+=CFG.pros; prosContador++; cidProspectadas.add(mun);
-      }
+        prosContador++;
+      });
     }
 
     if(simulado) slots._simulado=true;
@@ -1400,7 +1400,7 @@ function renderStats(){
   const set=(id,v,meta,boxId)=>{document.getElementById(id).textContent=v;const b=document.getElementById(boxId);if(b)b.className='stat-box'+(parseFloat(v)>=meta?' ok':parseFloat(v)>=meta*.7?' warn':'');};
   set('stVis',vis,CFG.metaVis,'stVisBox');
   document.getElementById('stCid').textContent=cids.size||'—';
-  set('stP',pros,CFG.metaProsp,'stPBox');
+  set('stP',pros,Infinity,'stPBox'); // sem teto: quantidade de prospecção não importa
   document.getElementById('stKm').textContent='~'+Math.round(km)+'km';
 }
 
@@ -1625,7 +1625,6 @@ function renderResumo(){
   });
 
   const pV=Math.min(100,Math.round(tv/CFG.metaVis*100));
-  const pP=Math.min(100,Math.round(tp/CFG.metaProsp*100));
 
   // Visitas por cliente e por rede (rede = mesmo código de cliente, lojas diferentes)
   const porCli={},porRede={};
@@ -1665,8 +1664,7 @@ function renderResumo(){
       <div class="res-list">
         <div class="res-item"><span class="ri-label">Visitas planejadas</span><span class="ri-val" style="color:${tv>=CFG.metaVis?'var(--verde)':'var(--vermelho)'}">${tv>=CFG.metaVis?'✅':'⚠️'} ${tv} / ${CFG.metaVis}</span></div>
         <div class="progress-bar"><div class="progress-fill ${pV>=100?'ok':pV>=70?'':'warn'}" style="width:${pV}%"></div></div>
-        <div class="res-item"><span class="ri-label">Prospecções</span><span class="ri-val">${tp} / ${CFG.metaProsp}</span></div>
-        <div class="progress-bar"><div class="progress-fill ${pP>=100?'ok':''}" style="width:${pP}%"></div></div>
+        <div class="res-item"><span class="ri-label">Prospecções (cidades &lt; 3 clientes)</span><span class="ri-val">${tp}</span></div>
       </div>
     </div>
     <div class="res-card">
