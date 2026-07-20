@@ -1064,65 +1064,42 @@ function gerarRoteiro(forceAll=false){
       if(gi>=0){grupo=gruposAng[gi];const d=diasDoGrupo(_disp(grupo,hoje))[0]||[];bloco=encheDia(d,grupo,hoje,0);usos[gi]++;}
     }
     if(!grupo)grupo=grupoCasa;
-    // Dia remoto curto: chama os OUTROS grupos (mais perto → mais longe) antes de recorrer
-    // a prospecção. Pula o próprio grupo do dia (já esgotado) e o casa (papel de sexta).
-    if(bloco&&tempoDia(bloco)<MIN_JORNADA){
-      const gi=grupo===grupoCasa?-1:gruposAng.indexOf(grupo);
-      _reforcaComGrupos(bloco,hoje,0,new Set(gi>=0?[gi]:[]));
-    }
+    // Dia remoto = SÓ o próprio grupo (+ top-up do grupo casa, feito dentro do encheDia).
+    // NUNCA puxa outro grupo remoto (regra absoluta: não misturar grupos).
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
     // Cidades do grupo → onde prospectar para completar o dia (mesmo sem visita: dia
     // NUNCA fica vazio, vira dia de prospecção nas cidades carentes daquele grupo).
     dia._munsProsp=_munsDe(grupo);
   }
-  // Grupo remoto MAIS PRÓXIMO de casa que ainda tem cliente livre — usado para reforçar
-  // a sexta quando o grupo casa não enche o dia.
-  const _grupoMaisPerto=hoje=>{
-    let best=-1,bd=Infinity;
-    gruposAng.forEach((g,i)=>{
-      const disp=_disp(g,hoje);
-      if(!disp.length) return;
-      const d=disp.reduce((s,c)=>s+_distH(c),0)/disp.length;
-      if(d<bd){bd=d;best=i;}
-    });
-    return best;
+  // ⚠️ REGRA ABSOLUTA (gestor, 2026-07-20): NENHUM grupo remoto pode se misturar com outro.
+  // A ÚNICA exceção é o GRUPO CASA, que pode completar qualquer dia (via encheDia). Por isso
+  // NÃO existe mais "chamar outro grupo remoto" para encher dia curto — foi removido o
+  // _reforcaComGrupos/_grupoMaisPerto. Dia (remoto ou sexta) = 1 grupo + top-up do casa, nada
+  // mais. Se o grupo-casa esgota numa sexta, ela é completada por UM ÚNICO grupo remoto.
+  // ESCOLHA DO GRUPO DA SEXTA FRACA (gestor, 2026-07-20): pelo cliente no TOPO da lista
+  // global — MENOS revisitas primeiro, desempate MAIS importante (_ordemRevisita). Assim as
+  // revisitas descem por TODOS os clientes em ordem, sem concentrar num grupo pequeno.
+  // Retorna o índice do grupo que contém esse cliente, ou -1.
+  const _grupoParaSextaFraca=hoje=>{
+    const cand=gruposAng.flat()
+      .filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_livre(c)&&_podeVisitar(c))
+      .sort(_ordemRevisita);
+    if(!cand.length) return -1;
+    const topId=_idc(cand[0]);
+    return gruposAng.findIndex(g=>g.some(c=>_idc(c)===topId));
   };
-  // DIA CURTO → CHAMA OUTRO GRUPO (regra do gestor, 2026-07-20): quando o dia não chega ao
-  // piso (16:30) com o próprio grupo + casa, o certo NÃO é lotar de prospecção — é puxar
-  // clientes livres dos DEMAIS grupos, do MAIS PRÓXIMO de casa ao mais distante, até o dia
-  // encher (ou acabarem os clientes livres). Prospecção deixa de ser tapa-buraco.
-  // `excl` = índices de grupos a pular (o próprio grupo do dia, já esgotado).
-  function _reforcaComGrupos(bloco,hoje,reserva,excl){
-    excl=excl||new Set();
-    const ids=new Set(bloco.map(_idc));
-    const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA;
-    const ordem=gruposAng.map((g,i)=>({g,i,d:g.length?g.reduce((s,c)=>s+_distH(c),0)/g.length:Infinity}))
-      .filter(o=>!excl.has(o.i)).sort((a,b)=>a.d-b.d);
-    const usados=[];
-    for(const {g,i} of ordem){
-      if(tempoDia(bloco)+(reserva||0)>=MIN_JORNADA) break;
-      const cand=g.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje,NAO_REPETIR)&&_livre(c)&&_podeVisitar(c)).sort(_ordemRevisita);
-      let usou=false;
-      for(const c of cand){
-        if(tempoDia(bloco)+(reserva||0)>=MIN_JORNADA) break;
-        if(cabe(c)){bloco.push(c);ids.add(_idc(c));usou=true;}
-      }
-      if(usou) usados.push('G'+(i+1));
-    }
-    return usados;
-  }
-  // Dia de CASA comum (sextas)
+  // Dia de CASA comum (sextas): grupo casa; se ficar curto, completa com 1 grupo remoto.
   function _montaCasa(dia){
     dia._casa=true;const hoje=_dnum(dia.data);
     let bloco=_blocoCasa(hoje,_proxC1Casa);
-    // SEXTA FRACA (regra do gestor, 2026-07-17/20): se o grupo casa não enche o dia, em vez
-    // de lotar de prospecção, CHAMA os grupos remotos — do mais perto ao mais longe — até o
-    // dia atingir o piso. Nunca mais uma sexta com 1 cliente + pilha de prospecções.
+    // SEXTA FRACA: o casa não encheu → completa com UM ÚNICO grupo remoto (o do cliente mais
+    // importante/menos revisitado). NUNCA um segundo grupo (regra: não misturar G+G).
     if(tempoDia(bloco)<MIN_JORNADA){
-      const gs=_reforcaComGrupos(bloco,hoje,0);
-      if(gs.length){
-        dia._juntou=gs.join('+');
-        conflitos.push({tipo:'sexta reforçada com grupo(s) vizinho(s)',data:dia.data,grupo:gs.join('+')});
+      const gi=_grupoParaSextaFraca(hoje);
+      if(gi>=0){
+        bloco=encheDia(bloco,gruposAng[gi],hoje,0,true);
+        dia._juntou='G'+(gi+1);
+        conflitos.push({tipo:'sexta completada com 1 grupo remoto',data:dia.data,grupo:'G'+(gi+1)});
       }
     }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
