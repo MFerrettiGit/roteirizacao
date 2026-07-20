@@ -947,7 +947,12 @@ function gerarRoteiro(forceAll=false){
   };
   // TETO de 4 visitas/mês por cliente (≈1 por semana). Já com 4, não recebe mais.
   const MAX_VIS_MES=4;
-  const _podeVisitar=c=>(visitasDe[_idc(c)]||[]).length<MAX_VIS_MES;
+  const _nVis=c=>(visitasDe[_idc(c)]||[]).length;
+  const _podeVisitar=c=>_nVis(c)<MAX_VIS_MES;
+  // REVISITA EM ONDAS (regra do gestor, 2026-07-17): ninguém ganha a 2ª revisita enquanto
+  // houver quem não teve a 1ª. Ordena por MENOS visitas no mês; empate → mais importante
+  // (venda mensal + mix médio). Evita uns clientes com 4× e outros nunca revisitados.
+  const _ordemRevisita=(a,z)=>(_nVis(a)-_nVis(z))||(_imp(z)-_imp(a));
   const _marca=(bloco,hoje)=>bloco.forEach(c=>{if(c)_addVis(_idc(c),hoje);});
   // Tempo já reservado por AGENDAMENTO(s) no dia (o cliente marcado não entra no bloco,
   // mas consome jornada — conta o atendimento dele).
@@ -962,9 +967,23 @@ function gerarRoteiro(forceAll=false){
     const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA; // TETO 17:48
     const add=lista=>{ for(const c of lista){
       if(!ids.has(_idc(c))&&_livre(c)&&_podeVisitar(c)&&cabe(c)){bloco.push(c);ids.add(_idc(c));} } };
-    // visitas legítimas (trava 7 dias cheia), por importância (venda mensal + mix médio)
-    add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
-    add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)).sort((a,z)=>_imp(z)-_imp(a)));
+    // visitas legítimas (trava 7 dias cheia), em ONDAS: quem tem menos visitas primeiro,
+    // desempate pelo mais importante (venda mensal + mix médio)
+    // ONDA atual = menor nº de visitas entre os clientes ainda visitáveis do setor.
+    // Ninguém passa de onda+1 enquanto houver quem esteja atrás — assim não aparece
+    // cliente com 3-4 visitas enquanto outros ainda não foram revisitados nenhuma vez.
+    const onda=(()=>{const vs=todosCli.filter(c=>_livre(c)&&_podeVisitar(c)).map(_nVis);return vs.length?Math.min(...vs):0;})();
+    // Nos dias comuns vale a onda estrita; na SEXTA abre uma onda (o grupo casa é pequeno
+    // e a sexta ficaria só de prospecção — o gestor pediu para aliviar a sexta).
+    const naOnda=c=>_nVis(c)<=(ehSexta?onda+1:onda);
+    add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&naOnda(c)).sort(_ordemRevisita));
+    add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&naOnda(c)).sort(_ordemRevisita));
+    // Se a onda estrita deixou o dia curto, abre UMA onda acima (nunca mais que isso, para
+    // não aparecer 4× enquanto há cliente com 1×). O que ainda faltar vira prospecção.
+    if(tempoDia(bloco)+(reserva||0)<MIN_JORNADA){
+      add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_nVis(c)<=onda+1).sort(_ordemRevisita));
+      add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_nVis(c)<=onda+1).sort(_ordemRevisita));
+    }
     // TODO DIA TEM VISITAS: se o grupo esgotou (0 visitas legítimas), a trava cede só o
     // bastante para garantir ao menos 1 visita real (o cliente mais importante, teto de
     // 4×/mês mantido). O resto do dia é completado por PROSPECÇÃO — não por revisita.
@@ -977,7 +996,7 @@ function gerarRoteiro(forceAll=false){
       const fontes=[[...new Set(poolGrupo.concat(grupoCasa))], todosCli];
       for(const fonte of fontes){
         for(let jan=NAO_REPETIR-1; jan>=0 && bloco.length===0; jan--){
-          const cand=fonte.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort((a,z)=>_imp(z)-_imp(a));
+          const cand=fonte.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort(_ordemRevisita);
           if(cand.length&&cabe(cand[0])){bloco.push(cand[0]);ids.add(_idc(cand[0]));}
         }
         if(bloco.length) break;
@@ -985,7 +1004,7 @@ function gerarRoteiro(forceAll=false){
     }
     return bloco;
   }
-  const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort((a,z)=>_imp(z)-_imp(a));
+  const _disp=(g,hoje,jan)=>g.filter(c=>!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort(_ordemRevisita);
 
   // 4b) AGENDAMENTO DEFINE O GRUPO DO DIA (regra do gestor, 2026-07-15)
   //     O dia em que há visita marcada é refeito com o grupo do cliente agendado.
@@ -1011,12 +1030,19 @@ function gerarRoteiro(forceAll=false){
     const k=gi==null?c1Remoto.findIndex(t=>!t._usado):c1Remoto.findIndex(t=>!t._usado&&t.gi===gi);
     if(k<0) return null; c1Remoto[k]._usado=true; return c1Remoto[k];
   };
-  // grupo com menos dias no mês; prefere os que têm ≥1 livre, mas SEMPRE devolve um
-  // grupo (se todos travados, o de menos usos — encheDia afrouxa p/ não deixar dia vazio).
+  // ESCOLHA DO GRUPO NA REVISITA (regra do gestor, 2026-07-17): vai ao grupo onde estão
+  // os clientes MAIS ATRASADOS em visitas — "antes de dar a 2ª revisita a alguém, veja se
+  // todos já tiveram a 1ª". A rota do dia é montada naquele grupo. Desempate: grupo com
+  // menos dias no mês (não repetir sempre a mesma rota).
   const _escolheGrupo=hoje=>{
-    let best=-1,bu=Infinity;
-    gruposAng.forEach((g,i)=>{if(_disp(g,hoje).length>=1&&usos[i]<bu){bu=usos[i];best=i;}});
-    if(best<0){bu=Infinity;gruposAng.forEach((g,i)=>{if(usos[i]<bu){bu=usos[i];best=i;}});}
+    let best=-1,bMin=Infinity,bUso=Infinity;
+    gruposAng.forEach((g,i)=>{
+      const disp=_disp(g,hoje);
+      if(!disp.length) return;
+      const minVis=Math.min(...disp.map(_nVis)); // o mais atrasado do grupo
+      if(minVis<bMin||(minVis===bMin&&usos[i]<bUso)){bMin=minVis;bUso=usos[i];best=i;}
+    });
+    if(best<0){let bu=Infinity;gruposAng.forEach((g,i)=>{if(usos[i]<bu){bu=usos[i];best=i;}});}
     return best;
   };
   const _blocoCasa=(hoje,ci)=>{
@@ -1046,10 +1072,32 @@ function gerarRoteiro(forceAll=false){
     // NUNCA fica vazio, vira dia de prospecção nas cidades carentes daquele grupo).
     dia._munsProsp=_munsDe(grupo);
   }
+  // Grupo remoto MAIS PRÓXIMO de casa que ainda tem cliente livre — usado para reforçar
+  // a sexta quando o grupo casa não enche o dia.
+  const _grupoMaisPerto=hoje=>{
+    let best=-1,bd=Infinity;
+    gruposAng.forEach((g,i)=>{
+      const disp=_disp(g,hoje);
+      if(!disp.length) return;
+      const d=disp.reduce((s,c)=>s+_distH(c),0)/disp.length;
+      if(d<bd){bd=d;best=i;}
+    });
+    return best;
+  };
   // Dia de CASA comum (sextas)
   function _montaCasa(dia){
     dia._casa=true;const hoje=_dnum(dia.data);
-    const bloco=_blocoCasa(hoje,_proxC1Casa);
+    let bloco=_blocoCasa(hoje,_proxC1Casa);
+    // SEXTA FRACA (regra do gestor, 2026-07-17): se o grupo casa não enche o dia, em vez
+    // de lotar de prospecção, JUNTA o grupo remoto mais próximo e monta a rota com os dois.
+    if(tempoDia(bloco)<MIN_JORNADA){
+      const gi=_grupoMaisPerto(hoje);
+      if(gi>=0){
+        bloco=encheDia(bloco,gruposAng[gi],hoje,0,true);
+        dia._juntou='G'+(gi+1);
+        conflitos.push({tipo:'sexta reforçada com grupo vizinho',data:dia.data,grupo:'G'+(gi+1)});
+      }
+    }
     if(bloco&&bloco.length){dia.clientes.push(...bloco);_marca(bloco,hoje);}
     dia._munsProsp=_munsDe(grupoCasa);
   }
@@ -1136,7 +1184,9 @@ function gerarRoteiro(forceAll=false){
       porCidDia[m].push(c);
     });
     let ordenados;
-    if(diaObj._casa&&!diaObj._mistoCidade){
+    // Sexta REFORÇADA com grupo vizinho deixa de ser rota fechada de casa: passa a valer
+    // a regra longe→perto (o dia agora tem clientes distantes).
+    if(diaObj._casa&&!diaObj._mistoCidade&&!diaObj._juntou){
       // GRUPO CASA: rota fechada casa→…→casa (sem regra de ordem específica).
       const centroCid=m=>{const cls=porCidDia[m];return[cls.reduce((s,c)=>s+(+c.latitude),0)/cls.length,cls.reduce((s,c)=>s+(+c.longitude),0)/cls.length];};
       const seqCid=tourFechado(ordCid,centroCid,homeLat,homeLon);
