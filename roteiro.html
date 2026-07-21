@@ -986,11 +986,10 @@ function gerarRoteiro(forceAll=false){
   // Tempo já reservado por AGENDAMENTO(s) no dia (o cliente marcado não entra no bloco,
   // mas consome jornada — conta o atendimento dele).
   const _reserva=dia=>(agPorDia[dia.data]||[]).reduce((s,a)=>{const c=cliPorId[a.clienteId];return s+(c?_dur(c):60);},0);
-  // ENCHE O DIA com VISITAS por importância (venda mensal + mix médio), respeitando a
-  // trava de 7 dias CHEIA e o TETO de 4 visitas/mês por cliente. NÃO afrouxa a trava:
-  // o que faltar para o dia chegar às 16:30 é completado com PROSPECÇÃO (passo 10).
-  // Assim as revisitas são as mínimas (só as legítimas, ≥7 dias) e ninguém passa de 4×/mês.
-  // reserva = tempo já ocupado por agendamento do dia.
+  // ENCHE O DIA com VISITAS por importância (venda mensal + mix médio), em ONDAS e com a
+  // trava de 7 dias CHEIA primeiro. Se mesmo assim o dia não chega às 16:30 (piso), a trava vai
+  // sendo DESCIDA (6→5→4→3… "até permitir", palavras do gestor), o mínimo necessário, seguindo
+  // a onda. Teto de 4 visitas/mês por cliente SEMPRE mantido. reserva = tempo do agendamento.
   function encheDia(bloco,poolGrupo,hoje,reserva,ehSexta){
     const ids=new Set(bloco.map(_idc));
     const cabe=c=>tempoDia(bloco.concat(c))+(reserva||0)<=JORNADA; // TETO 17:48
@@ -1008,10 +1007,25 @@ function gerarRoteiro(forceAll=false){
     add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&naOnda(c)).sort(_ordemRevisita));
     add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&naOnda(c)).sort(_ordemRevisita));
     // Se a onda estrita deixou o dia curto, abre UMA onda acima (nunca mais que isso, para
-    // não aparecer 4× enquanto há cliente com 1×). O que ainda faltar vira prospecção.
+    // não aparecer 4× enquanto há cliente com 1×).
     if(tempoDia(bloco)+(reserva||0)<MIN_JORNADA){
       add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_nVis(c)<=onda+1).sort(_ordemRevisita));
       add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_nVis(c)<=onda+1).sort(_ordemRevisita));
+    }
+    // PISO DAS 16:30 (regra DURA do gestor, 2026-07-21): é PROIBIDO terminar antes das 16:30.
+    // Se ainda falta (todos travados 7d — ex.: sexta do CIRCUITO), DESCE a trava 6→5→4→3…1
+    // ("até permitir"), o mínimo necessário, seguindo a ONDA (menos visitas primeiro → dá a 2ª
+    // a todos antes da 3ª a alguém), SÓ no grupo do dia + casa (NUNCA mistura outro grupo).
+    // Teto de 4×/mês sempre mantido — se todos do grupo já estão no teto, o dia pode ficar curto.
+    if(tempoDia(bloco)+(reserva||0)<MIN_JORNADA){
+      const fonte=[...new Set(poolGrupo.concat(grupoCasa))];
+      for(let jan=NAO_REPETIR-1; jan>=1 && tempoDia(bloco)+(reserva||0)<MIN_JORNADA; jan--){
+        const cand=fonte.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort(_ordemRevisita);
+        for(const c of cand){
+          if(tempoDia(bloco)+(reserva||0)>=MIN_JORNADA) break;
+          if(cabe(c)){bloco.push(c);ids.add(_idc(c));}
+        }
+      }
     }
     // TODO DIA TEM VISITAS: se o grupo esgotou (0 visitas legítimas), a trava cede só o
     // bastante para garantir ao menos 1 visita real (o cliente mais importante, teto de
