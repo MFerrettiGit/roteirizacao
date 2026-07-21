@@ -869,7 +869,7 @@ function gerarRoteiro(forceAll=false){
   // (tipicamente 1 cidade só). Aí os grupos NÃO são fatias angulares por cidade — são 4
   // QUADRANTES geográficos (Norte/Leste/Sul/Oeste) a partir da casa. NÃO há grupo-casa nem
   // sexta especial: cada quadrante é um grupo e enche os dias como qualquer outro.
-  const RAIO_COMPACTO=60, PCT_COMPACTO=0.90, MARGEM_DIVISA=3; // km · fração · graus da divisa
+  const RAIO_COMPACTO=30, PCT_COMPACTO=0.90, MARGEM_DIVISA=3; // km · fração · graus da divisa
   const _naFaixa=todosCli.filter(c=>_distH(c)<=RAIO_COMPACTO).length;
   const MODO_QUADRANTE = todosCli.length>0 && (_naFaixa/todosCli.length)>=PCT_COMPACTO;
   const NOME_QUAD={N:'Norte',L:'Leste',S:'Sul',O:'Oeste'};
