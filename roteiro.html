@@ -880,6 +880,28 @@ function gerarRoteiro(forceAll=false){
     }
   }
 
+  // REATRIBUIÇÃO POR ÂNGULO (gestor, 2026-07-21): o cliente é definido pelo ÂNGULO (rumo da
+  // casa), não pela cidade. Um cliente cujo RUMO bate claramente com OUTRO grupo (não o da sua
+  // cidade) vai pra esse grupo — corrige o "cliente isolado" que a grupagem por cidade deixou no
+  // ângulo errado (ex.: CIRCUITO "Rede de Distribuição", Moji, rumo 309° = ângulo do G4/Sto
+  // Antônio, não do G5/Moji 333°). Passe ÚNICO com rumos FIXOS. Só move se o outro grupo estiver
+  // ≥ ANG_OUTLIER graus mais alinhado que o atual (só outlier claro; FRANCA não move nada).
+  const ANG_OUTLIER=20;
+  if(gruposAng.length>1){
+    const angD=(a,b)=>{let d=Math.abs(a-b)%360;return d>180?360-d:d;};
+    const _cen=g=>[g.reduce((s,c)=>s+ +c.latitude,0)/g.length, g.reduce((s,c)=>s+ +c.longitude,0)/g.length];
+    const rumoG=gruposAng.map(g=>bearingDeg(homeLat,homeLon,..._cen(g)));
+    const mover=[];
+    gruposAng.forEach((g,gi)=>g.forEach(c=>{
+      const b=bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude);
+      let bg=gi,bd=angD(b,rumoG[gi]);
+      rumoG.forEach((rj,gj)=>{const d=angD(b,rj);if(d<bd){bd=d;bg=gj;}});
+      if(bg!==gi && angD(b,rumoG[gi])-bd>=ANG_OUTLIER) mover.push({c,from:gi,to:bg});
+    }));
+    mover.forEach(mv=>{const i=gruposAng[mv.from].indexOf(mv.c);if(i>=0){gruposAng[mv.from].splice(i,1);gruposAng[mv.to].push(mv.c);}});
+    for(let i=gruposAng.length-1;i>=0;i--) if(!gruposAng[i].length) gruposAng.splice(i,1);
+  }
+
   // ══════════════════════════════════════════════════════════════════════════════
   // MODO 2 — QUADRANTES (setor COMPACTO, ex.: Campinas Norte) — gestor 2026-07-20
   // Se ≥ PCT_COMPACTO dos clientes estão a ≤ RAIO_COMPACTO km da casa, o setor é compacto
@@ -1223,6 +1245,7 @@ function gerarRoteiro(forceAll=false){
     grupoCasa:grupoCasa.length,remotos:remotos.length,
     grupos:gruposAng.map((g,i)=>({g:(gruposNome?gruposNome[i]:'G'+(i+1)),n:g.length,cidades:[...new Set(g.map(c=>c.municipio))].join('+'),
       rumo:Math.round(bearingDeg(homeLat,homeLon,..._cenB(g)))})),
+    assign:(()=>{const m={};gruposAng.forEach((g,i)=>g.forEach(c=>m[_idc(c)]=(gruposNome?gruposNome[i]:'G'+(i+1))));grupoCasa.forEach(c=>m[_idc(c)]='CASA');return m;})(),
     c1Remoto:c1Remoto.length,c1Casa:c1Casa.length,conflitos,
     naoRepetir:NAO_REPETIR,afrouxadas
   };
