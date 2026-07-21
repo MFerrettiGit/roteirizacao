@@ -863,6 +863,20 @@ function gerarRoteiro(forceAll=false){
     }
   });
 
+  // REFINAÇÃO DO GRUPO-CASA (gestor, 2026-07-21): o raio de 12 km "rouba" clientes de cidades
+  // REMOTAS que por acaso caem dentro do raio (dividindo a cidade e criando um cliente-casa
+  // isolado colado num grupo remoto). REGRA: o cliente-casa que está MAIS PERTO de um cliente
+  // de grupo remoto do que da própria CASA pertence àquele grupo remoto. Assim o grupo-casa
+  // fica só com quem está no raio E longe dos grupos remotos.
+  if(gruposAng.length){
+    for(let i=grupoCasa.length-1;i>=0;i--){
+      const c=grupoCasa[i], dHome=_distH(c);
+      let best=-1,bd=Infinity;
+      gruposAng.forEach((g,gi)=>g.forEach(o=>{const d=haversine(+c.latitude,+c.longitude,+o.latitude,+o.longitude);if(d<bd){bd=d;best=gi;}}));
+      if(best>=0 && bd<dHome){ gruposAng[best].push(c); grupoCasa.splice(i,1); }
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════════════════
   // MODO 2 — QUADRANTES (setor COMPACTO, ex.: Campinas Norte) — gestor 2026-07-20
   // Se ≥ PCT_COMPACTO dos clientes estão a ≤ RAIO_COMPACTO km da casa, o setor é compacto
@@ -1004,13 +1018,19 @@ function gerarRoteiro(forceAll=false){
     // Nos dias comuns vale a onda estrita; na SEXTA abre uma onda (o grupo casa é pequeno
     // e a sexta ficaria só de prospecção — o gestor pediu para aliviar a sexta).
     const naOnda=c=>_nVis(c)<=(ehSexta?onda+1:onda);
+    // COMPLETAR COM O CASA RESPEITA A ANGULAÇÃO (gestor, 2026-07-21): não completar um grupo do
+    // NORTE com um cliente-casa do SUL. Só quando o dia é de um grupo REMOTO (num dia de casa
+    // puro, poolGrupo é o próprio casa → sem filtro). Janela de ±90° do rumo do grupo do dia.
+    const _poolCasa=poolGrupo===grupoCasa;
+    const _poolB=(_poolCasa||!poolGrupo.length)?null:bearingDeg(homeLat,homeLon,..._cenB(poolGrupo));
+    const _casaAng=c=>{ if(_poolB==null) return true; let d=Math.abs(bearingDeg(homeLat,homeLon,+c.latitude,+c.longitude)-_poolB)%360; if(d>180)d=360-d; return d<=90; };
     add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&naOnda(c)).sort(_ordemRevisita));
-    add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&naOnda(c)).sort(_ordemRevisita));
+    add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&naOnda(c)&&_casaAng(c)).sort(_ordemRevisita));
     // Se a onda estrita deixou o dia curto, abre UMA onda acima (nunca mais que isso, para
     // não aparecer 4× enquanto há cliente com 1×).
     if(tempoDia(bloco)+(reserva||0)<MIN_JORNADA){
       add(poolGrupo.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_nVis(c)<=onda+1).sort(_ordemRevisita));
-      add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_nVis(c)<=onda+1).sort(_ordemRevisita));
+      add(grupoCasa.filter(c=>!_bloq(c,hoje,NAO_REPETIR)&&_nVis(c)<=onda+1&&_casaAng(c)).sort(_ordemRevisita));
     }
     // PISO DAS 16:30 (regra DURA do gestor, 2026-07-21): é PROIBIDO terminar antes das 16:30.
     // Se ainda falta (todos travados 7d — ex.: sexta do CIRCUITO), DESCE a trava 6→5→4→3…1
@@ -1018,7 +1038,7 @@ function gerarRoteiro(forceAll=false){
     // a todos antes da 3ª a alguém), SÓ no grupo do dia + casa (NUNCA mistura outro grupo).
     // Teto de 4×/mês sempre mantido — se todos do grupo já estão no teto, o dia pode ficar curto.
     if(tempoDia(bloco)+(reserva||0)<MIN_JORNADA){
-      const fonte=[...new Set(poolGrupo.concat(grupoCasa))];
+      const fonte=[...new Set(poolGrupo.concat(grupoCasa.filter(_casaAng)))];
       for(let jan=NAO_REPETIR-1; jan>=1 && tempoDia(bloco)+(reserva||0)<MIN_JORNADA; jan--){
         const cand=fonte.filter(c=>!ids.has(_idc(c))&&!_bloq(c,hoje,jan)&&_livre(c)&&_podeVisitar(c)).sort(_ordemRevisita);
         for(const c of cand){
