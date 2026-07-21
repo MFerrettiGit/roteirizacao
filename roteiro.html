@@ -779,6 +779,8 @@ function gerarRoteiro(forceAll=false){
   const HOME_RADIUS=12; // km — raio do grupo da casa (≈ dist. casa→Restinga); padrão p/ todos
   const GAP_CIDADE=13;  // vão angular (graus) entre cidades vizinhas que separa grupos grossos
   const AMPL_MAX=10;    // amplitude angular (graus) máx. de um grupo; acima disso, corta por ÂNGULO
+  const MERGE_ANG=10;   // subgrupo pequeno só se junta ao vizinho se estiver a ≤ este ângulo (graus);
+                        // acima disso fica como grupo próprio (gestor: "ângulos bem diferentes = grupos diferentes")
   const _idc=c=>c.cod_cliente+'_'+c.loja;
   const _distH=c=>haversine(homeLat,homeLon,+c.latitude,+c.longitude);
 
@@ -840,7 +842,8 @@ function gerarRoteiro(forceAll=false){
           // anexa à fatia ANGULAR mais próxima (por rumo), não à geograficamente próxima
           const ri=_rumoMed(subs[i]);let bj=-1,bd=Infinity;
           for(let j=0;j<subs.length;j++){if(j===i)continue;const d=Math.abs(_rumoMed(subs[j])-ri);if(d<bd){bd=d;bj=j;}}
-          if(bj>=0){subs[bj]=subs[bj].concat(subs[i]);subs.splice(i,1);mudou=true;break;}
+          // só junta se o vizinho estiver a ≤ MERGE_ANG; ângulo bem diferente = grupo próprio
+          if(bj>=0&&bd<=MERGE_ANG){subs[bj]=subs[bj].concat(subs[i]);subs.splice(i,1);mudou=true;break;}
         }
       }
       subs.forEach(s=>gruposAng.push(s.flatMap(c=>c.cls)));
