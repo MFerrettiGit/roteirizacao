@@ -527,33 +527,29 @@ function tituloCidade(m){return (m||'').toLowerCase().split(/\s+/)
   .map((p,i)=>(i>0&&['de','do','da','dos','das','e'].includes(p))?p:p.charAt(0).toUpperCase()+p.slice(1))
   .join(' ');}
 
-// Médias REAIS por classe (A/B/C/'') calculadas uma vez a partir de tempos-cliente.js:
-// junta o tempo real de todos os clientes daquela classe e tira a média. É a base usada
-// para quem AINDA não tem visita registrada — SEMPRE um tempo médio real, nunca uma
-// curva inventada arredondada a 15 min. Cache em _mediaClasse.
-let _mediaClasse=null;
-function mediaClasse(){
-  if(_mediaClasse) return _mediaClasse;
-  const acc={A:[],B:[],C:[],'':[]};
-  (window.CLIENTES_DATA||[]).forEach(c=>{
-    const t=window.TEMPO_CLIENTE&&window.TEMPO_CLIENTE[c.cod_cliente+'_'+c.loja];
-    if(t!=null){const k=c.classificacao||'';(acc[k]||(acc[k]=[])).push(+t);}
-  });
-  const all=[].concat(...Object.values(acc));
-  const gl=all.length?Math.round(all.reduce((s,x)=>s+x,0)/all.length):45;
-  const avg=a=>a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):gl;
-  _mediaClasse={A:avg(acc.A),B:avg(acc.B),C:avg(acc.C),'':avg(acc['']),GLOBAL:gl};
-  return _mediaClasse;
+// MÉDIA REAL DO SETOR (gestor, 2026-07-21): "cada setor tem um padrão de tempo".
+// Média dos tempos reais dos clientes DO PRÓPRIO SETOR (o vendedor atual, CLIENTES já vem
+// filtrado por cod_vendedor). É a base para quem NÃO tem visita registrada — número
+// característico do setor, não uma média global nem uma curva por classe.
+// Se o setor NÃO tem nenhum tempo real (REPRESENTANTE, ex.: S.J.Boa Vista/Sorocaba, que não
+// usam TimeService), cai — só nesse caso extremo — na média global de todos os setores.
+let _mediaSetor=null;
+function mediaSetor(){
+  if(_mediaSetor!=null) return _mediaSetor;
+  const T=window.TEMPO_CLIENTE||{};
+  const ts=(CLIENTES||[]).map(c=>T[c.cod_cliente+'_'+c.loja]).filter(t=>t!=null).map(Number);
+  if(ts.length){ _mediaSetor=Math.round(ts.reduce((s,x)=>s+x,0)/ts.length); return _mediaSetor; }
+  const all=Object.values(T).map(Number);
+  _mediaSetor=all.length?Math.round(all.reduce((s,x)=>s+x,0)/all.length):45; // último recurso
+  return _mediaSetor;
 }
 // Tempo de atendimento do cliente. SEMPRE um TEMPO MÉDIO REAL (min):
 //  1º) média real INDIVIDUAL do próprio cliente (tempos-cliente.js);
-//  2º) se ele ainda não tem visita registrada, a média real da SUA CLASSE (A/B/C).
-// Não há mais estimativa por perfil arredondada a 15 min.
+//  2º) se ele ainda não tem visita registrada, a média real do SEU SETOR.
 function duracaoCliente(c){
   const real=window.TEMPO_CLIENTE&&window.TEMPO_CLIENTE[c.cod_cliente+'_'+c.loja];
   if(real!=null) return Math.round(+real);
-  const m=mediaClasse();
-  return m[c.classificacao||''] ?? m.GLOBAL;
+  return mediaSetor();
 }
 function diasUteis(ano,mes){const d=new Date(ano,mes,1),r=[];while(d.getMonth()===mes){if(isUtil(d))r.push(ds(new Date(d)));d.setDate(d.getDate()+1);}return r;}
 function nomeDataLongo(d){return(d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});}
@@ -1498,7 +1494,7 @@ function renderDia(date){
         // Tempo médio real: individual do cliente, ou média real da classe se ele ainda
         // não tem visita registrada. Nunca mais é estimativa por perfil.
         const _real=window.TEMPO_CLIENTE&&window.TEMPO_CLIENTE[s.clienteId]!=null;
-        sub+=`<span title="${_real?'Tempo médio real de atendimento deste cliente (visitas jan–jul)':'Cliente ainda sem visita registrada — usando a média real da classe '+(s.classificacao||'sem classe')}">⏱ ${s.duracao} min</span>`;
+        sub+=`<span title="${_real?'Tempo médio real de atendimento deste cliente (visitas jan–jul)':'Cliente sem visita registrada — usando a média real de atendimento do setor'}">⏱ ${s.duracao} min</span>`;
       }
     }
     let acao='';
